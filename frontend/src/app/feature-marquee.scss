@@ -1,0 +1,82 @@
+:host {
+  display: block;
+}
+
+.feature-marquees {
+  display: grid;
+  gap: 10px;
+  margin: 20px -4px 24px;
+  overflow: hidden;
+  padding: 3px 0;
+}
+
+.feature-marquee {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent);
+  overflow: hidden;
+}
+
+.feature-marquee-track {
+  animation: feature-marquee-left 38s linear infinite;
+  display: flex;
+  gap: 12px;
+  width: max-content;
+}
+
+.feature-marquee-reverse .feature-marquee-track {
+  animation-direction: reverse;
+  animation-duration: 44s;
+}
+
+.feature-marquee:hover .feature-marquee-track {
+  animation-play-state: paused;
+}
+
+.feature-marquee-card {
+  align-items: center;
+  background: linear-gradient(112deg, #c9dcff 0%, #f9fbff 48%, #dce9ff 100%);
+  border: 1px solid #afc9f3;
+  border-radius: 12px;
+  box-shadow: 0 5px 13px #315eb91a, inset 0 1px 2px #fff;
+  color: #274c8a;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 650;
+  gap: 9px;
+  isolation: isolate;
+  min-height: 43px;
+  overflow: hidden;
+  padding: 0 17px;
+  position: relative;
+}
+
+.feature-marquee-card::before {
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.82' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.72'/%3E%3C/svg%3E");
+  content: '';
+  inset: 0;
+  mix-blend-mode: multiply;
+  opacity: 0.32;
+  pointer-events: none;
+  position: absolute;
+  z-index: -1;
+}
+
+.feature-marquee-dot {
+  background: linear-gradient(145deg, #5790f5, #82aaf2);
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 5px #356ae655;
+  height: 9px;
+  width: 9px;
+}
+
+@keyframes feature-marquee-left {
+  to { transform: translateX(-50%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .feature-marquee-track {
+    animation: none;
+  }
+}

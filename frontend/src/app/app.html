@@ -1,0 +1,696 @@
+<div class="app-shell">
+  <aside class="sidebar" [class.sidebar-open]="menuOpen()">
+    <a class="brand" href="#" (click)="navigate('home', $event)" aria-label="Kaly accueil">
+      <span class="brand-mark"><svg lucideHouse /></span>
+      <span>Kaly</span>
+    </a>
+
+    <div class="workspace-label">ESPACE DE TRAVAIL</div>
+    <nav class="main-nav" aria-label="Navigation principale">
+      <button class="nav-link" [class.active]="activeView() === 'home'" (click)="navigate('home')">
+        <svg lucideLayoutDashboard /><span>Vue d’ensemble</span>
+      </button>
+      <button class="nav-link" [class.active]="activeView() === 'library'" (click)="navigate('library')">
+        <svg lucideFiles /><span>Mes documents</span>
+        <span class="nav-count">{{ documents().length }}</span>
+      </button>
+    </nav>
+
+    <div class="workspace-label tools-label">OUTILS</div>
+    <nav class="main-nav" aria-label="Outils">
+      <button class="nav-link" [class.active]="activeView() === 'scanner'" (click)="navigate('scanner')">
+        <svg lucideScanLine /><span>Scanner un document</span>
+      </button>
+      <button class="nav-link" [class.active]="activeView() === 'merge'" (click)="navigate('merge')">
+        <svg lucideCombine /><span>Fusionner des PDF</span>
+      </button>
+      <button class="nav-link" [class.active]="activeView() === 'convert'" (click)="navigate('convert')">
+        <svg lucideFileImage /><span>Convertir & extraire</span>
+      </button>
+    </nav>
+
+    <div class="workspace-label tools-label">COMMUNAUTÉ</div>
+    <nav class="main-nav" aria-label="Communauté">
+      <button class="nav-link" [class.active]="activeView() === 'support'" (click)="navigate('support')">
+        <svg lucideHeart /><span>Soutenir le projet</span>
+      </button>
+    </nav>
+
+    @if (authUser()?.role === 'ADMIN') {
+      <div class="workspace-label tools-label">ADMINISTRATION</div>
+      <nav class="main-nav" aria-label="Administration">
+        <button class="nav-link" [class.active]="activeView() === 'admin'" (click)="navigate('admin')">
+          <svg lucideUserCog /><span>Utilisateurs</span>
+        </button>
+      </nav>
+    }
+
+    <div class="sidebar-bottom">
+      <div class="storage-card">
+        <span class="storage-icon"><svg lucideShieldCheck /></span>
+        <div>
+          <strong>Vos fichiers restent privés</strong>
+          <p>Les opérations sont réalisées dans votre navigateur.</p>
+        </div>
+      </div>
+      @if (isAuthenticated()) {
+        <button class="profile-button" type="button" (click)="logout()">
+          <span class="avatar">{{ authUser()?.displayName?.charAt(0)?.toUpperCase() || 'K' }}</span>
+          <span class="profile-copy"><strong>{{ authUser()?.displayName }}</strong><small>Déconnexion</small></span>
+          <svg lucideLogOut />
+        </button>
+      } @else {
+        <button class="profile-button" type="button" (click)="openAuth('login')">
+          <span class="avatar">K</span>
+          <span class="profile-copy"><strong>Mon espace local</strong><small>Se connecter ou créer un compte</small></span>
+          <svg lucideLogIn />
+        </button>
+      }
+    </div>
+  </aside>
+
+  <main class="main-area">
+    <header class="topbar">
+      <button class="mobile-menu" type="button" (click)="menuOpen.update(value => !value)" aria-label="Ouvrir le menu">
+        <svg lucidePanelLeftClose />
+      </button>
+      <div class="breadcrumb"><span>Kaly</span><svg lucideChevronRight /><strong>{{ pageTitle() }}</strong></div>
+      <div class="topbar-actions">
+        @if (activeView() === 'library') {
+          <label class="search-box">
+            <svg lucideSearch />
+            <input type="search" placeholder="Rechercher un document…" aria-label="Rechercher un document" [value]="searchTerm()" (input)="searchTerm.set($any($event.target).value)" />
+          </label>
+        }
+        @if (isAuthenticated()) {
+          <div class="notification-wrapper">
+            <button class="notification-trigger" type="button" (click)="toggleNotifications()" [attr.aria-expanded]="notificationsOpen()" aria-label="Afficher les notifications">
+              <svg lucideBell />
+              @if (unreadNotificationCount() > 0) { <span class="notification-count">{{ unreadNotificationCount() > 99 ? '99+' : unreadNotificationCount() }}</span> }
+            </button>
+            @if (notificationsOpen()) {
+              <section class="notification-panel" aria-label="Centre de notifications">
+                <header>
+                  <div><strong>Notifications</strong><small>{{ unreadNotificationCount() }} non lue{{ unreadNotificationCount() > 1 ? 's' : '' }}</small></div>
+                  @if (unreadNotificationCount() > 0) { <button class="text-button" type="button" (click)="markAllNotificationsRead()">Tout marquer comme lu</button> }
+                </header>
+                @if (notifications().length === 0) {
+                  <p class="notification-empty">Aucune notification pour le moment.</p>
+                } @else {
+                  <div class="notification-list">
+                    @for (notification of notifications(); track notification.id) {
+                      <button class="notification-item" type="button" [class.notification-unread]="!notification.readAt" (click)="markNotificationRead(notification)">
+                        <span class="notification-indicator"></span>
+                        <span><strong>{{ notification.title }}</strong><small>{{ notification.message }}</small><time>{{ notification.createdAt | date:'d MMM yyyy, HH:mm' }}</time></span>
+                      </button>
+                    }
+                  </div>
+                }
+              </section>
+            }
+          </div>
+          <button class="avatar top-avatar" type="button" (click)="logout()" [attr.aria-label]="'Déconnexion de ' + authUser()?.displayName">
+            {{ authUser()?.displayName?.charAt(0)?.toUpperCase() || 'K' }}
+          </button>
+        } @else {
+          <button class="text-button auth-top-button" type="button" (click)="openAuth('login')"><svg lucideLogIn /> Connexion</button>
+        }
+      </div>
+    </header>
+
+    <div class="content">
+      @if (notice()) {
+        <div class="notice" [attr.role]="noticeIsError() ? 'alert' : 'status'" [class.notice-error]="noticeIsError()">
+          <span>{{ notice() }}</span>
+          <button type="button" (click)="notice.set('')" aria-label="Fermer"><svg lucideX /></button>
+        </div>
+      }
+
+      @if (activeView() === 'auth') {
+        <section class="auth-page">
+          <div class="auth-card">
+            <span class="auth-mark"><svg lucideUserRound /></span>
+            <h1>{{ ({
+              login: 'Ravi de vous revoir.',
+              register: 'Créez votre espace.',
+              forgot: 'Retrouvez votre accès.',
+              reset: 'Choisissez un nouveau mot de passe.'
+            })[authMode()] }}</h1>
+            <p class="subheading">{{ ({
+              login: 'Connectez-vous pour retrouver vos documents privés.',
+              register: 'Vos documents seront stockés dans votre espace personnel.',
+              forgot: 'Saisissez votre adresse e-mail pour recevoir un lien sécurisé.',
+              reset: 'Votre nouveau mot de passe doit contenir au moins 10 caractères.'
+            })[authMode()] }}</p>
+            <form class="auth-form" (submit)="submitAuth($event)">
+              @if (authMode() === 'register') {
+                <label class="field-label" for="auth-name">Nom </label>
+                <input class="text-input" id="auth-name" name="displayName" type="text" autocomplete="name" required maxlength="100" />
+              }
+              @if (authMode() !== 'reset') {
+                <label class="field-label" for="auth-email">Adresse e-mail</label>
+                <input class="text-input" id="auth-email" name="email" type="email" autocomplete="email" required maxlength="254" />
+              }
+              @if (authMode() === 'login' || authMode() === 'register' || authMode() === 'reset') {
+                <label class="field-label" for="auth-password">{{ authMode() === 'reset' ? 'Nouveau mot de passe' : 'Mot de passe' }}</label>
+                <div class="password-input-wrap">
+                  <input class="text-input" id="auth-password" name="password" [type]="passwordVisible() ? 'text' : 'password'" [attr.autocomplete]="authMode() === 'login' ? 'current-password' : 'new-password'" required [attr.minlength]="authMode() === 'login' ? 1 : 10" maxlength="72" />
+                  <button class="password-visibility" type="button" (click)="togglePasswordVisibility()" [attr.aria-label]="passwordVisible() ? 'Masquer le mot de passe' : 'Afficher le mot de passe'" [attr.aria-pressed]="passwordVisible()">
+                    @if (passwordVisible()) { <svg lucideEyeOff /> } @else { <svg lucideEye /> }
+                  </button>
+                </div>
+              }
+              @if (authMode() === 'register') {
+                <label class="field-label confirmation-label" for="auth-confirm-password">Confirmer le mot de passe</label>
+                <div class="password-input-wrap">
+                  <input class="text-input" id="auth-confirm-password" name="confirmPassword" [type]="confirmationPasswordVisible() ? 'text' : 'password'" autocomplete="new-password" required minlength="10" maxlength="72" />
+                  <button class="password-visibility" type="button" (click)="toggleConfirmationPasswordVisibility()" [attr.aria-label]="confirmationPasswordVisible() ? 'Masquer la confirmation du mot de passe' : 'Afficher la confirmation du mot de passe'" [attr.aria-pressed]="confirmationPasswordVisible()">
+                    @if (confirmationPasswordVisible()) { <svg lucideEyeOff /> } @else { <svg lucideEye /> }
+                  </button>
+                </div>
+                <small class="field-help">10 caractères minimum. Votre mot de passe est protégé par BCrypt.</small>
+              }
+              <button class="button button-primary full-button auth-submit" type="submit" [disabled]="authBusy()">
+                @if (authBusy()) { <span class="spinner"></span> Veuillez patienter… }
+                @else if (authMode() === 'login') { <svg lucideLogIn /> Se connecter }
+                @else if (authMode() === 'register') { <svg lucideUserRound /> Créer mon compte }
+                @else if (authMode() === 'forgot') { Recevoir le lien de réinitialisation }
+                @else { Modifier mon mot de passe }
+              </button>
+            </form>
+            @if (authMode() === 'login') {
+              <button class="text-button auth-forgot" type="button" (click)="authMode.set('forgot')">Mot de passe oublié ?</button>
+              <p class="auth-switch">Vous n’avez pas encore de compte ?
+                <button class="text-button" type="button" (click)="authMode.set('register')">Créer un compte</button>
+              </p>
+            } @else if (authMode() === 'register') {
+              <p class="auth-switch">Vous avez déjà un compte ?
+                <button class="text-button" type="button" (click)="authMode.set('login')">Se connecter</button>
+              </p>
+            } @else {
+              <button class="text-button auth-guest" type="button" (click)="authMode.set('login')">Retour à la connexion</button>
+            }
+            <button class="text-button auth-guest" type="button" (click)="navigate('home')">Continuer sans compte</button>
+          </div>
+        </section>
+      }
+
+      @if (activeView() === 'support') {
+        <section class="page-heading support-heading">
+          <div>
+            <p class="eyebrow">UN PROJET LIBRE ET GRATUIT</p>
+            <h1>Soutenir Kaly</h1>
+            <p class="subheading">Kaly restera gratuite. Votre soutien aide à financer son développement et à la rendre meilleure pour tous.</p>
+          </div>
+        </section>
+        <section class="support-grid">
+          <article class="support-card support-primary-card">
+            <span class="support-icon"><svg lucideHeart /></span>
+            <h2>Faire un don</h2>
+            <p>Chaque contribution, ponctuelle ou régulière, aide à couvrir l’hébergement, la maintenance et les prochaines améliorations.</p>
+            @if (supportUrl) {
+              <a class="button button-primary" [href]="supportUrl" target="_blank" rel="noopener noreferrer">
+                Soutenir financièrement <svg lucideExternalLink />
+              </a>
+            } @else {
+              <div class="support-unavailable" role="status">
+                Le lien sécurisé de soutien sera ajouté ici dès que la plateforme de dons sera configurée.
+              </div>
+            }
+          </article>
+          <article class="support-card">
+            <span class="support-icon support-icon-soft"><svg lucideArrowUpRight /></span>
+            <h2>Faire connaître Kaly</h2>
+            <p>Vous pouvez aussi aider gratuitement en partageant Kaly avec une personne qui pourrait en avoir besoin.</p>
+            <button class="button button-secondary" type="button" (click)="shareKaly()">Partager Kaly <svg lucideArrowUpRight /></button>
+          </article>
+        </section>
+        <p class="support-promise"><svg lucideShieldCheck /> Aucun document ni donnée personnelle n’est vendu. Les dons restent entièrement facultatifs.</p>
+      }
+
+      @if (activeView() === 'admin' && authUser()?.role === 'ADMIN') {
+        <section class="page-heading">
+          <div><p class="eyebrow">ESPACE SÉCURISÉ</p><h1>Administration</h1><p class="subheading">Gérez les comptes et leurs accès. La désactivation ne supprime pas les documents.</p></div>
+          <span class="admin-count"><svg lucideUserRound /> {{ adminUserCount() }} compte{{ adminUserCount() > 1 ? 's' : '' }}</span>
+        </section>
+        <section class="admin-layout">
+          <article class="settings-card admin-create-card">
+            <span class="settings-icon"><svg lucideUserPlus /></span>
+            <h2>Créer un compte</h2>
+            <p>Les inscriptions publiques reçoivent toujours le rôle Utilisateur.</p>
+            <form class="admin-user-form" (submit)="createManagedUser($event)">
+              <label class="field-label" for="managed-name">Nom</label>
+              <input class="text-input" id="managed-name" name="displayName" autocomplete="name" required maxlength="100" />
+              <label class="field-label" for="managed-email">Adresse e-mail</label>
+              <input class="text-input" id="managed-email" name="email" type="email" autocomplete="email" required maxlength="254" />
+              <label class="field-label" for="managed-password">Mot de passe temporaire</label>
+              <input class="text-input" id="managed-password" name="password" type="password" autocomplete="new-password" required minlength="10" maxlength="72" />
+              <label class="field-label" for="managed-role">Rôle</label>
+              <select class="text-input" id="managed-role" name="role" required>
+                <option value="USER">Utilisateur</option>
+                <option value="ADMIN">Administrateur</option>
+              </select>
+              <button class="button button-primary full-button" type="submit" [disabled]="adminBusy()">
+                @if (adminBusy()) { <span class="spinner"></span> Enregistrement… } @else { <svg lucideUserPlus /> Créer le compte }
+              </button>
+            </form>
+          </article>
+          <section class="settings-card admin-list-card">
+            <div class="admin-list-heading"><div><h2>Comptes Kaly</h2><p>{{ adminUsers().length }} utilisateur{{ adminUsers().length > 1 ? 's' : '' }}</p></div><button class="icon-button" type="button" (click)="refreshAdminUsers()" [disabled]="adminBusy()" aria-label="Actualiser la liste"><svg lucideRotateCw /></button></div>
+            @if (adminUsers().length === 0) {
+              <div class="notification-empty">Aucun compte disponible.</div>
+            } @else {
+              <div class="admin-user-list">
+                @for (user of adminUsers(); track user.id) {
+                  <article class="admin-user-row">
+                    <span class="avatar admin-user-avatar">{{ user.displayName.charAt(0).toUpperCase() }}</span>
+                    <span class="admin-user-details"><strong>{{ user.displayName }}</strong><small>{{ user.email }}</small><small>Créé le {{ user.createdAt | date:'d MMM yyyy' }}</small></span>
+                    <span class="role-badge" [class.role-admin]="user.role === 'ADMIN'">{{ user.role === 'ADMIN' ? 'Admin' : 'Utilisateur' }}</span>
+                    <span class="account-state" [class.account-disabled]="!user.enabled">{{ user.enabled ? 'Actif' : 'Désactivé' }}</span>
+                    @if (user.id !== authUser()?.id) {
+                      <button class="button button-secondary account-action" type="button" (click)="toggleManagedUser(user)" [disabled]="adminBusy()">{{ user.enabled ? 'Désactiver' : 'Réactiver' }}</button>
+                    } @else { <small class="current-account">Vous</small> }
+                  </article>
+                }
+              </div>
+            }
+          </section>
+        </section>
+      }
+
+      @if (activeView() === 'home') {
+        <section class="welcome-row">
+          <div>
+            <h1>Bonjour, bienvenue chez Kaly<span>.</span></h1>
+            <p class="subheading">Vos documents, bien organisés et prêts à être utilisés.</p>
+          </div>
+          <button class="button button-primary" type="button" (click)="navigate('scanner')">
+            <svg lucidePlus /> Nouveau scan
+          </button>
+        </section>
+
+        <section class="hero-card">
+          <div class="hero-copy">
+            <svg lucideSparkles />
+            <h2>Tout commence<br />avec un document.</h2>
+            <p>Numérisez, réunissez et préparez vos fichiers PDF depuis un espace simple et serein.</p>
+            <button class="button button-light" type="button" (click)="navigate('merge')">Explorer les outils <svg lucideArrowUpRight /></button>
+          </div>
+          <div class="hero-art" aria-hidden="true">
+            <div class="paper paper-back"></div>
+            <div class="paper paper-front">
+              <span class="paper-emblem"><svg lucideFileText /></span>
+              <i></i><i></i><i></i><b></b>
+            </div>
+            <span class="hero-orb orb-one"></span><span class="hero-orb orb-two"></span>
+          </div>
+        </section>
+
+        <app-feature-marquee />
+
+        <section class="stats-grid" aria-label="Statistiques">
+          <article class="stat-card">
+            <span class="stat-icon blue"><svg lucideFiles /></span>
+            <span class="stat-label">Documents</span>
+            <strong>{{ documents().length }}</strong>
+            <small>dans cet espace</small>
+          </article>
+          <article class="stat-card">
+            <span class="stat-icon green"><svg lucideFileText /></span>
+            <span class="stat-label">PDF créés</span>
+            <strong>{{ pdfCreated() }}</strong>
+            <small>avec Kaly</small>
+          </article>
+          <article class="stat-card">
+            <span class="stat-icon lilac"><svg lucideSparkles /></span>
+            <span class="stat-label">Opérations</span>
+            <strong>{{ operationsCount() }}</strong>
+            <small>réalisées dans cette session</small>
+          </article>
+        </section>
+
+        <section class="section-block">
+          <div class="section-heading">
+            <div><h2>Que souhaitez-vous faire ?</h2><p>Choisissez un outil pour commencer.</p></div>
+          </div>
+          <div class="tools-grid">
+            <button class="tool-card" type="button" (click)="navigate('scanner')">
+              <span class="tool-icon tool-blue"><svg lucideScanLine /></span>
+              <span class="tool-content"><strong>Scanner un document</strong><small>Capturez plusieurs pages avec votre caméra.</small></span>
+              <svg lucideArrowUpRight class="tool-arrow" />
+            </button>
+            <button class="tool-card" type="button" (click)="navigate('merge')">
+              <span class="tool-icon tool-peach"><svg lucideCombine /></span>
+              <span class="tool-content"><strong>Fusionner des fichiers</strong><small>Réunissez des PDF et des images.</small></span>
+              <svg lucideArrowUpRight class="tool-arrow" />
+            </button>
+            <button class="tool-card" type="button" (click)="navigate('convert')">
+              <span class="tool-icon tool-green"><svg lucideFileImage /></span>
+              <span class="tool-content"><strong>Convertir & extraire</strong><small>Images vers PDF ou sélection de pages.</small></span>
+              <svg lucideArrowUpRight class="tool-arrow" />
+            </button>
+          </div>
+        </section>
+
+        <section class="section-block recent-block">
+          <div class="section-heading">
+            <div><h2>Récemment ajoutés</h2><p>Retrouvez les derniers fichiers enregistrés dans ce navigateur.</p></div>
+            <button class="text-button" type="button" (click)="navigate('library')">Voir tout <svg lucideArrowRight /></button>
+          </div>
+          @if (documents().length === 0) {
+            <div class="empty-state compact-empty">
+              <span class="empty-icon"><svg lucideFiles /></span>
+              <strong>Votre espace est prêt</strong>
+              <p>Importez un fichier ou créez votre premier scan pour le retrouver ici.</p>
+              <button class="button button-secondary" type="button" (click)="navigate('library')"><svg lucidePlus /> Ajouter un document</button>
+            </div>
+          } @else {
+            <div class="recent-list">
+              @for (doc of recentDocuments(); track doc.id) {
+                <button class="recent-item" type="button" (click)="previewDocument(doc)">
+                  <span class="file-icon" [class.image-file]="doc.kind === 'image'"><svg lucideFileText /></span>
+                  <span class="recent-name"><strong>{{ doc.name }}</strong><small>{{ formatBytes(doc.file.size) }} · {{ doc.addedAt | date:'d MMM, HH:mm' }}</small></span>
+                  <svg lucideChevronRight class="recent-arrow" />
+                </button>
+              }
+            </div>
+          }
+        </section>
+      }
+
+      @if (activeView() === 'library') {
+        <section class="page-heading">
+          <div><p class="eyebrow">VOTRE ESPACE</p><h1>Mes documents</h1><p class="subheading">{{ isAuthenticated() ? 'Vos documents sont stockés dans votre espace personnel.' : 'Vos fichiers sont conservés dans le stockage local de ce navigateur.' }}</p></div>
+          <label class="button button-primary upload-button"><svg lucideUpload /> Importer des fichiers<input type="file" accept=".pdf,image/png,image/jpeg,image/webp" multiple (change)="onLibraryFiles($event)" /></label>
+        </section>
+        <section class="folder-toolbar" aria-label="Gestion des dossiers">
+          <label class="folder-filter">Dossier
+            <select [value]="folderFilter()" (change)="folderFilter.set($any($event.target).value)">
+              <option value="all">Tous les dossiers</option>
+              @for (folder of folders(); track folder.id) { <option [value]="folder.id">{{ folder.name }}</option> }
+            </select>
+          </label>
+          <button class="button button-secondary" type="button" (click)="createFolder()"><svg lucidePlus /> Nouveau dossier</button>
+          @if (folderFilter() !== 'all') {
+            @for (folder of folders(); track folder.id) {
+              @if (folder.id === folderFilter()) {
+                <button class="icon-button" type="button" (click)="renameFolder(folder)" [attr.aria-label]="'Renommer le dossier ' + folder.name"><svg lucidePencil /></button>
+                <button class="icon-button danger-hover" type="button" (click)="deleteFolder(folder)" [attr.aria-label]="'Supprimer le dossier ' + folder.name"><svg lucideTrash2 /></button>
+              }
+            }
+          }
+        </section>
+        <section class="library-toolbar">
+          <div class="filter-pills">
+            <button type="button" [class.selected]="libraryFilter() === 'all'" (click)="libraryFilter.set('all')">Tout <span>{{ documents().length }}</span></button>
+            <button type="button" [class.selected]="libraryFilter() === 'pdf'" (click)="libraryFilter.set('pdf')">PDF</button>
+            <button type="button" [class.selected]="libraryFilter() === 'image'" (click)="libraryFilter.set('image')">Images</button>
+          </div>
+          <span class="result-count">{{ filteredDocuments().length }} fichier{{ filteredDocuments().length > 1 ? 's' : '' }}</span>
+        </section>
+        @if (filteredDocuments().length === 0) {
+          <div class="empty-state library-empty">
+            <span class="empty-icon"><svg lucideFolder /></span>
+            <strong>{{ searchTerm() ? 'Aucun résultat' : 'Aucun document pour le moment' }}</strong>
+            <p>{{ searchTerm() ? 'Essayez un autre nom ou effacez votre recherche.' : 'Importez un PDF ou une image pour commencer.' }}</p>
+            @if (!searchTerm()) { <label class="button button-secondary upload-button"><svg lucideUpload /> Choisir des fichiers<input type="file" accept=".pdf,image/png,image/jpeg,image/webp" multiple (change)="onLibraryFiles($event)" /></label> }
+          </div>
+        } @else {
+          <div class="document-grid">
+            @for (doc of filteredDocuments(); track doc.id) {
+              <article class="document-card">
+                <button class="document-preview" type="button" (click)="previewDocument(doc)" [attr.aria-label]="'Prévisualiser ' + doc.name">
+                  @if (doc.kind === 'image') { <img [src]="doc.previewUrl" [alt]="doc.name" /> }
+                  @else { <span class="pdf-preview"><svg lucideFileText /><small>PDF</small></span> }
+                </button>
+                <div class="document-meta">
+                  <span class="file-icon" [class.image-file]="doc.kind === 'image'"><svg lucideFileText /></span>
+                  <div class="document-name"><strong [title]="doc.name">{{ doc.name }}</strong><small>{{ formatBytes(doc.file.size) }} · {{ doc.addedAt | date:'d MMM yyyy' }}</small></div>
+                  <button class="icon-button" type="button" (click)="downloadDocument(doc)" [attr.aria-label]="'Télécharger ' + doc.name"><svg lucideDownload /></button>
+                  <button class="icon-button" type="button" (click)="renameDocument(doc)" [attr.aria-label]="'Renommer ' + doc.name"><svg lucidePencil /></button>
+                  <button class="icon-button danger-hover" type="button" (click)="removeDocument(doc)" [attr.aria-label]="'Supprimer ' + doc.name"><svg lucideTrash2 /></button>
+                </div>
+                @if (folders().length > 0) {
+                  <label class="document-folder">Dossier
+                    <select [value]="doc.folderId ?? ''" (change)="moveDocument(doc, $event)">
+                      <option value="">Aucun dossier</option>
+                      @for (folder of folders(); track folder.id) { <option [value]="folder.id">{{ folder.name }}</option> }
+                    </select>
+                  </label>
+                }
+              </article>
+            }
+          </div>
+        }
+      }
+
+      @if (activeView() === 'merge') {
+        <section class="page-heading">
+          <div><p class="eyebrow">OUTIL PDF</p><h1>Fusionner vos fichiers</h1><p class="subheading">Assemblez des PDF et des images en un seul document.</p></div>
+        </section>
+        <section class="editor-layout">
+          <div class="editor-main">
+            <div class="upload-zone" [class.drag-active]="dragActive()" (dragover)="onDragOver($event)" (dragleave)="dragActive.set(false)" (drop)="onDrop($event)">
+              <span class="upload-symbol"><svg lucideUpload /></span>
+              <strong>Déposez vos fichiers ici</strong>
+              <p>PDF, JPG ou PNG · 50 Mo maximum par fichier</p>
+              <label class="button button-secondary upload-button">Parcourir les fichiers<input type="file" accept=".pdf,image/png,image/jpeg" multiple (change)="onMergeFiles($event)" /></label>
+            </div>
+            @if (mergeFiles().length > 0) {
+              <div class="file-list-heading"><strong>Fichiers à assembler</strong><span>{{ mergeFiles().length }} élément{{ mergeFiles().length > 1 ? 's' : '' }}</span></div>
+              <div class="merge-list">
+                @for (file of mergeFiles(); track $index; let i = $index) {
+                  <div class="merge-item">
+                    <span class="merge-position" [attr.aria-label]="'Position ' + (i + 1)">{{ i + 1 }}</span>
+                    <span class="file-icon" [class.image-file]="isImage(file)"><svg lucideFileText /></span>
+                    <div class="merge-file-name"><strong>{{ file.name }}</strong><small>{{ formatBytes(file.size) }}</small></div>
+                    <button class="icon-button" type="button" (click)="moveMergeFile(i, -1)" [disabled]="i === 0" [attr.aria-label]="'Monter ' + file.name"><svg lucideArrowLeft /></button>
+                    <button class="icon-button" type="button" (click)="moveMergeFile(i, 1)" [disabled]="i === mergeFiles().length - 1" [attr.aria-label]="'Descendre ' + file.name"><svg lucideArrowRight /></button>
+                    <button class="icon-button danger-hover" type="button" (click)="removeMergeFile(i)" [attr.aria-label]="'Retirer ' + file.name"><svg lucideX /></button>
+                  </div>
+                }
+              </div>
+            }
+          </div>
+          <aside class="settings-card">
+            <span class="settings-icon"><svg lucideCombine /></span>
+            <h2>Votre document final</h2>
+            <p>Les fichiers seront assemblés dans l’ordre affiché.</p>
+            <label class="field-label" for="merge-name">Nom du fichier</label>
+            <div class="filename-input"><input id="merge-name" type="text" [value]="mergeName()" (input)="mergeName.set($any($event.target).value)" placeholder="document-kaly" /><span>.pdf</span></div>
+            <div class="settings-note"><svg lucideShieldCheck /><span>Le traitement s’effectue localement dans votre navigateur.</span></div>
+            <button class="button button-primary full-button" type="button" (click)="mergePdfs()" [disabled]="mergeFiles().length < 2 || isBusy()">
+              @if (isBusy()) { <span class="spinner"></span> Assemblage… } @else { <svg lucideCombine /> Fusionner les fichiers }
+            </button>
+            @if (mergeFiles().length < 2) { <small class="validation-hint">Ajoutez au moins deux fichiers pour continuer.</small> }
+          </aside>
+        </section>
+      }
+
+      @if (activeView() === 'convert') {
+        <section class="page-heading">
+          <div><p class="eyebrow">OUTIL PDF</p><h1>Convertir & extraire</h1><p class="subheading">Transformez vos images en PDF ou extrayez les pages dont vous avez besoin.</p></div>
+        </section>
+        <section class="convert-grid">
+          <article class="convert-card">
+            <span class="convert-icon warm"><svg lucideImage /></span>
+            <h2>Images vers PDF</h2>
+            <p>Réunissez plusieurs images JPG ou PNG dans un PDF multipage.</p>
+            <label class="button button-secondary upload-button"><svg lucideUpload /> Choisir des images<input type="file" accept="image/png,image/jpeg" multiple (change)="onConvertImages($event)" /></label>
+            @if (imageFiles().length > 0) {
+              <div class="selected-files">{{ imageFiles().length }} image{{ imageFiles().length > 1 ? 's' : '' }} sélectionnée{{ imageFiles().length > 1 ? 's' : '' }}</div>
+              <button class="button button-primary full-button" type="button" (click)="imagesToPdf()" [disabled]="isBusy()">@if (isBusy()) { <span class="spinner"></span> Création… } @else { Créer le PDF }</button>
+            }
+          </article>
+          <article class="convert-card">
+            <span class="convert-icon cool"><svg lucideFileText /></span>
+            <h2>Extraire des pages</h2>
+            <p>Créez un nouveau PDF à partir de pages choisies dans un document.</p>
+            <label class="field-label" for="extract-pdf">Document PDF</label>
+            <label class="file-picker" for="extract-pdf"><svg lucideUpload /><span>{{ extractFile()?.name || 'Choisir un fichier PDF' }}</span><input id="extract-pdf" type="file" accept="application/pdf,.pdf" (change)="onExtractFile($event)" /></label>
+            @if (extractFile()) {
+              <label class="field-label" for="page-range">Pages à conserver</label>
+              <input class="text-input" id="page-range" type="text" [value]="pageRange()" (input)="pageRange.set($any($event.target).value)" placeholder="Ex. 1, 3-5" />
+              <small class="field-help">Numérotation à partir de 1. Exemple : 1, 3-5.</small>
+              <button class="button button-primary full-button" type="button" (click)="extractPages()" [disabled]="isBusy()">@if (isBusy()) { <span class="spinner"></span> Extraction… } @else { Extraire les pages }</button>
+            }
+          </article>
+        </section>
+        <section class="section-block">
+          <div class="section-heading">
+            <div><h2>Reconnaissance de texte</h2><p>Extrayez le texte d’un scan ou d’un document PDF en français, directement dans votre navigateur.</p></div>
+          </div>
+          <article class="convert-card ocr-card">
+            <label class="field-label" for="ocr-file">PDF ou image</label>
+            <label class="file-picker" for="ocr-file"><svg lucideUpload /><span>{{ ocrFile()?.name || 'Choisir un fichier' }}</span><input id="ocr-file" type="file" accept="application/pdf,.pdf,image/jpeg,image/png,image/webp" (change)="onOcrFile($event)" /></label>
+            <small class="field-help">Les fichiers sont traités localement. Un PDF est limité à 20 pages par opération.</small>
+            @if (ocrFile()) {
+              <button class="button button-primary full-button" type="button" (click)="recognizeText()" [disabled]="isBusy()">
+                @if (isBusy()) { <span class="spinner"></span> Reconnaissance… } @else { <svg lucideFileText /> Extraire le texte }
+              </button>
+            }
+            @if (isBusy() && ocrProgress() > 0) {
+              <label class="ocr-progress">Progression {{ ocrProgress() }}%<progress max="100" [value]="ocrProgress()"></progress></label>
+            }
+            @if (ocrText()) {
+              <label class="field-label" for="ocr-result">Texte reconnu</label>
+              <textarea class="text-input ocr-result" id="ocr-result" rows="8" [value]="ocrText()" readonly></textarea>
+              <button class="button button-secondary" type="button" (click)="downloadOcrText()"><svg lucideDownload /> Télécharger le texte</button>
+            }
+          </article>
+        </section>
+        <section class="section-block pdf-editor-block">
+          <div class="section-heading">
+            <div><h2>Organiser, diviser ou compresser un PDF</h2><p>Prévisualisez les pages, puis déplacez-les, faites-les pivoter ou supprimez-les.</p></div>
+          </div>
+          <article class="convert-card">
+            <label class="field-label" for="advanced-pdf">Document PDF à traiter</label>
+            <label class="file-picker" for="advanced-pdf"><svg lucideUpload /><span>{{ advancedPdfFile()?.name || 'Choisir un fichier PDF' }}</span><input id="advanced-pdf" type="file" accept="application/pdf,.pdf" (change)="onAdvancedPdfFile($event)" /></label>
+            @if (advancedPdfFile()) {
+              <div class="pdf-editor-heading"><strong>Pages du document</strong><span>{{ pdfPages().length }} affichées</span></div>
+              @if (isBusy() && pdfPages().length === 0) { <div class="pdf-editor-loading"><span class="spinner"></span> Préparation des aperçus…</div> }
+              @if (pdfPages().length > 0) {
+                <div class="pdf-page-grid">
+                  @for (page of pdfPages(); track page.pageNumber; let i = $index) {
+                    <article class="pdf-page-card">
+                      <div class="pdf-page-image"><img [src]="page.previewUrl" [alt]="'Aperçu page ' + page.pageNumber" [style.transform]="'rotate(' + page.rotation + 'deg)'" /></div>
+                      <div class="pdf-page-controls">
+                        <strong>Page {{ page.pageNumber }}</strong>
+                        <button class="icon-button" type="button" (click)="movePdfPage(i, -1)" [disabled]="i === 0" [attr.aria-label]="'Monter la page ' + page.pageNumber"><svg lucideArrowLeft /></button>
+                        <button class="icon-button" type="button" (click)="movePdfPage(i, 1)" [disabled]="i === pdfPages().length - 1" [attr.aria-label]="'Descendre la page ' + page.pageNumber"><svg lucideArrowRight /></button>
+                        <button class="icon-button" type="button" (click)="rotatePdfPage(i)" [attr.aria-label]="'Pivoter la page ' + page.pageNumber"><svg lucideRotateCw /></button>
+                        <button class="icon-button danger-hover" type="button" (click)="removePdfPage(i)" [attr.aria-label]="'Supprimer la page ' + page.pageNumber"><svg lucideTrash2 /></button>
+                      </div>
+                    </article>
+                  }
+                </div>
+                <div class="pdf-action-row">
+                  <button class="button button-primary" type="button" (click)="saveEditedPdf()" [disabled]="isBusy()"><svg lucideFileText /> Enregistrer le PDF organisé</button>
+                  <button class="button button-secondary" type="button" (click)="pdfToImages()" [disabled]="isBusy()"><svg lucideImage /> Convertir les pages en images</button>
+                </div>
+              }
+              <div class="pdf-advanced-actions">
+                <div>
+                  <strong>Diviser le PDF</strong>
+                  <p>Indiquez les plages à conserver dans chaque fichier, séparées par un point-virgule.</p>
+                  <label class="field-label" for="split-ranges">Plages de pages</label>
+                  <input class="text-input" id="split-ranges" type="text" [value]="splitRanges()" (input)="splitRanges.set($any($event.target).value)" placeholder="1-3; 4-6" />
+                  <button class="button button-secondary" type="button" (click)="splitPdf()" [disabled]="isBusy()"><svg lucideFiles /> Diviser et télécharger</button>
+                </div>
+                <div>
+                  <strong>Compresser le PDF</strong>
+                  <p>Réduit les images en raster. Les pages obtenues ne contiennent plus de texte sélectionnable.</p>
+                  <button class="button button-secondary" type="button" (click)="compressPdf()" [disabled]="isBusy()"><svg lucideDownload /> Compresser et télécharger</button>
+                </div>
+              </div>
+            }
+          </article>
+        </section>
+        <p class="privacy-footnote"><svg lucideShieldCheck /> Les fichiers restent dans votre navigateur pendant ces opérations. Ils ne sont pas envoyés à un serveur.</p>
+      }
+
+      @if (activeView() === 'scanner') {
+        <section class="page-heading">
+          <div><p class="eyebrow">OUTIL DE NUMÉRISATION</p><h1>Scanner un document</h1><p class="subheading">Utilisez votre caméra ou importez des images pour créer un PDF multipage.</p></div>
+        </section>
+        <section class="scanner-layout">
+          <div class="scanner-main">
+            <div class="camera-stage" [class.camera-active]="cameraActive()">
+              @if (cameraActive()) { <video #cameraVideo autoplay playsinline></video> }
+              @else {
+                <div class="camera-placeholder">
+                  <span class="camera-illustration"><svg lucideCamera /></span>
+                  <strong>Prêt à numériser ?</strong>
+                  <p>Autorisez l’accès à votre caméra, ou importez directement des photos.</p>
+                  <button class="button button-primary" type="button" (click)="startCamera()"><svg lucideCamera /> Activer la caméra</button>
+                </div>
+              }
+              @if (cameraActive()) {
+                <div class="camera-controls">
+                  <label class="filter-select">Filtre
+                    <select [value]="scanFilter()" (change)="scanFilter.set($any($event.target).value)">
+                      <option value="color">Couleur originale</option><option value="grayscale">Niveaux de gris</option><option value="bw">Noir et blanc</option>
+                    </select>
+                  </label>
+                  <button class="capture-button" type="button" (click)="capturePage()" [disabled]="isBusy()" aria-label="Prendre une photo"><span></span></button>
+                  <button class="button button-light" type="button" (click)="stopCamera()" [disabled]="isBusy()">Arrêter</button>
+                </div>
+              }
+            </div>
+            <label class="auto-crop-option">
+              <input type="checkbox" [checked]="autoCrop()" (change)="autoCrop.set($any($event.target).checked)" />
+              <span><strong>Recadrage automatique</strong><small>Détecter les bords et corriger la perspective avec OpenCV.</small></span>
+            </label>
+            <div class="scanner-import-row">
+              <span>Pas de caméra sous la main ?</span>
+              <label class="text-button upload-button"><svg lucideUpload /> Importer des photos<input type="file" accept="image/png,image/jpeg" multiple (change)="onScanImages($event)" /></label>
+            </div>
+          </div>
+          <aside class="settings-card scan-pages-card">
+            <div class="file-list-heading"><strong>Pages numérisées</strong><span>{{ scanPages().length }}</span></div>
+            @if (scanPages().length === 0) {
+              <div class="scan-empty"><svg lucideFiles /><p>Vos pages apparaîtront ici.</p></div>
+            } @else {
+              <div class="scan-page-list">
+                @for (page of scanPages(); track page.id; let i = $index) {
+                  <div class="scan-page">
+                    <img [src]="page.url" [alt]="'Page ' + (i + 1)" [style.transform]="'rotate(' + page.rotation + 'deg)'" />
+                    <span><strong>Page {{ i + 1 }}</strong><small>{{ page.source }}</small></span>
+                    <button class="icon-button" type="button" (click)="moveScanPage(i, -1)" [disabled]="i === 0" [attr.aria-label]="'Monter la page ' + (i + 1)"><svg lucideArrowLeft /></button>
+                    <button class="icon-button" type="button" (click)="moveScanPage(i, 1)" [disabled]="i === scanPages().length - 1" [attr.aria-label]="'Descendre la page ' + (i + 1)"><svg lucideArrowRight /></button>
+                    <button class="icon-button" type="button" (click)="rotateScanPage(i)" [attr.aria-label]="'Pivoter la page ' + (i + 1)"><svg lucideRotateCw /></button>
+                    <button class="icon-button" type="button" (click)="cropScanPage(i)" [disabled]="isBusy()" [attr.aria-label]="'Recadrer automatiquement la page ' + (i + 1)" title="Recadrer automatiquement"><svg lucideCrop /></button>
+                    <button class="icon-button danger-hover" type="button" (click)="removeScanPage(i)" [attr.aria-label]="'Supprimer la page ' + (i + 1)"><svg lucideTrash2 /></button>
+                  </div>
+                }
+              </div>
+              <label class="field-label" for="scan-name">Nom du PDF</label>
+              <input class="text-input" id="scan-name" type="text" [value]="scanName()" (input)="scanName.set($any($event.target).value)" />
+              <button class="button button-primary full-button" type="button" (click)="createScanPdf()" [disabled]="isBusy()">@if (isBusy()) { <span class="spinner"></span> Création… } @else { <svg lucideDownload /> Créer et télécharger le PDF }</button>
+            }
+          </aside>
+        </section>
+      }
+    </div>
+  </main>
+</div>
+
+@if (appDialog(); as dialog) {
+  <div class="dialog-backdrop" role="presentation" (click)="closeDialogFromBackdrop($event)" (keydown.escape)="cancelDialog()">
+    <section class="app-dialog" [attr.role]="dialog.kind === 'confirm' ? 'alertdialog' : 'dialog'" aria-modal="true" [attr.aria-labelledby]="'app-dialog-title'" [attr.aria-describedby]="'app-dialog-description'" (click)="$event.stopPropagation()">
+      <span class="dialog-icon" [class.dialog-icon-danger]="dialog.kind === 'confirm'">
+        @if (dialog.kind === 'confirm') { <svg lucideCircleAlert /> } @else { <svg lucidePencil /> }
+      </span>
+      <h2 id="app-dialog-title">{{ dialog.title }}</h2>
+      <p id="app-dialog-description">{{ dialog.description }}</p>
+      @if (dialog.kind === 'prompt') {
+        <form (submit)="resolvePrompt($event)">
+          <label class="field-label" for="app-dialog-input">{{ dialog.label }}</label>
+          <input class="dialog-input" id="app-dialog-input" type="text" [value]="dialogInput()" (input)="dialogInput.set($any($event.target).value)" [attr.maxlength]="dialog.maximumLength" autofocus />
+          <footer class="dialog-actions">
+            <button class="button button-secondary" type="button" (click)="cancelDialog()">Annuler</button>
+            <button class="button button-primary" type="submit">Continuer</button>
+          </footer>
+        </form>
+      } @else {
+        <footer class="dialog-actions">
+          <button class="button button-secondary" type="button" (click)="resolveConfirmation(false)">Annuler</button>
+          <button class="button button-danger" type="button" (click)="resolveConfirmation(true)">{{ dialog.confirmLabel }}</button>
+        </footer>
+      }
+    </section>
+  </div>
+}
+
+@if (selectedDocument(); as doc) {
+  <div class="modal-backdrop" (click)="closePreview()" (keydown.escape)="closePreview()" role="presentation">
+    <section class="preview-modal" role="dialog" aria-modal="true" [attr.aria-label]="'Aperçu de ' + doc.name" (click)="$event.stopPropagation()">
+      <header class="preview-header"><div><span class="file-icon"><svg lucideFileText /></span><span><strong>{{ doc.name }}</strong><small>{{ formatBytes(doc.file.size) }}</small></span></div><button class="icon-button" type="button" (click)="closePreview()" aria-label="Fermer l’aperçu"><svg lucideX /></button></header>
+      <div class="preview-body">
+        @if (doc.kind === 'image') { <img [src]="doc.previewUrl" [alt]="doc.name" /> }
+        @else { <iframe [src]="safePreviewUrl()" [title]="'Aperçu de ' + doc.name"></iframe> }
+      </div>
+      <footer class="preview-footer"><span>Aperçu local</span><button class="button button-secondary" type="button" (click)="downloadDocument(doc)"><svg lucideDownload /> Télécharger</button></footer>
+    </section>
+  </div>
+}

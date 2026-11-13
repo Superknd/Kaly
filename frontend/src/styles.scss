@@ -1,0 +1,247 @@
+:root {
+  color-scheme: light;
+  font-family: Inter, "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: #f5f6f8;
+  color: #202736;
+  font-optical-sizing: auto;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background: #f5f6f8;
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+body::after {
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.92' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.42'/%3E%3C/svg%3E");
+  content: "";
+  inset: 0;
+  opacity: 0.075;
+  pointer-events: none;
+  position: fixed;
+  z-index: 1000;
+}
+
+.dialog-backdrop {
+  align-items: center;
+  animation: fade-in 130ms ease-out;
+  background: #20273685;
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 20px;
+  position: fixed;
+  z-index: 60;
+}
+
+.app-dialog {
+  background: #fff;
+  border: 1px solid #e8edf3;
+  border-radius: 16px;
+  box-shadow: 0 24px 70px #10192b40;
+  max-width: 440px;
+  padding: 25px;
+  width: 100%;
+}
+
+.dialog-icon {
+  align-items: center;
+  background: #edf2ff;
+  border-radius: 11px;
+  color: #356ae6;
+  display: flex;
+  height: 39px;
+  justify-content: center;
+  margin-bottom: 17px;
+  width: 39px;
+}
+
+.dialog-icon-danger {
+  background: #fff1ef;
+  color: #c45049;
+}
+
+.dialog-icon svg {
+  height: 19px;
+  width: 19px;
+}
+
+.app-dialog h2 {
+  color: #283449;
+  font-size: 17px;
+  letter-spacing: -0.3px;
+  margin: 0;
+}
+
+.app-dialog > p {
+  color: #7d889a;
+  font-size: 12px;
+  line-height: 1.65;
+  margin: 9px 0 18px;
+}
+
+.dialog-input {
+  background: #fafbfd;
+  border: 1px solid #dfe5ee;
+  border-radius: 8px;
+  color: #354156;
+  font: inherit;
+  font-size: 12px;
+  height: 40px;
+  padding: 0 11px;
+  width: 100%;
+}
+
+.dialog-input:focus {
+  border-color: #7195ed;
+  outline: 3px solid #356ae626;
+}
+
+.dialog-actions {
+  display: flex;
+  gap: 9px;
+  justify-content: flex-end;
+  margin-top: 21px;
+}
+
+.button-danger {
+  align-items: center;
+  background: #c74f49;
+  border: 1px solid #c74f49;
+  border-radius: 8px;
+  color: #fff;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  gap: 7px;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 13px;
+}
+
+.support-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: 900px;
+}
+
+.support-card {
+  background: #fff;
+  border: 1px solid #e8edf3;
+  border-radius: 14px;
+  box-shadow: 0 4px 16px #20273608;
+  padding: 24px;
+}
+
+.support-primary-card {
+  background: linear-gradient(145deg, #fff 0%, #f7f9ff 100%);
+}
+
+.support-icon {
+  align-items: center;
+  background: #fff0ef;
+  border-radius: 11px;
+  color: #d65b54;
+  display: flex;
+  height: 42px;
+  justify-content: center;
+  width: 42px;
+}
+
+.support-icon-soft {
+  background: #edf2ff;
+  color: #356ae6;
+}
+
+.support-icon svg {
+  height: 20px;
+  width: 20px;
+}
+
+.support-card h2 {
+  color: #2e3a4e;
+  font-size: 16px;
+  margin: 17px 0 8px;
+}
+
+.support-card p {
+  color: #7e899b;
+  font-size: 12px;
+  line-height: 1.7;
+  margin: 0 0 19px;
+  max-width: 440px;
+}
+
+.support-card .button svg {
+  height: 15px;
+  width: 15px;
+}
+
+.support-unavailable {
+  background: #f7f8fb;
+  border: 1px dashed #dce2eb;
+  border-radius: 9px;
+  color: #778398;
+  font-size: 11px;
+  line-height: 1.6;
+  padding: 12px;
+}
+
+.support-promise {
+  align-items: center;
+  color: #8792a3;
+  display: flex;
+  font-size: 11px;
+  gap: 8px;
+  margin-top: 19px;
+}
+
+.support-promise svg {
+  color: #319b70;
+  height: 16px;
+  width: 16px;
+}
+
+@media (max-width: 640px) {
+  .support-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dialog-backdrop {
+    animation: none;
+  }
+}
+
+button,
+input,
+select {
+  font-family: inherit;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+.upload-button:focus-within {
+  outline: 3px solid #356ae64d;
+  outline-offset: 2px;
+}
+
+::selection {
+  background: #dce7ff;
+  color: #244a9b;
+}

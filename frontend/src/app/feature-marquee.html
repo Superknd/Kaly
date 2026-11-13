@@ -1,0 +1,14 @@
+<section class="feature-marquees" aria-label="Fonctionnalités de Kaly">
+  @for (row of rows; track row.label; let index = $index) {
+    <div class="feature-marquee" [class.feature-marquee-reverse]="index === 1" [attr.aria-label]="row.label">
+      <div class="feature-marquee-track">
+        @for (feature of row.features; track feature) {
+          <span class="feature-marquee-card"><span class="feature-marquee-dot"></span>{{ feature }}</span>
+        }
+        @for (feature of row.features; track feature) {
+          <span class="feature-marquee-card" aria-hidden="true"><span class="feature-marquee-dot"></span>{{ feature }}</span>
+        }
+      </div>
+    </div>
+  }
+</section>
