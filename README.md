@@ -1,6 +1,6 @@
 # Kaly
 
-Kaly est une application de gestion et de préparation de documents. Le frontend Angular propose une bibliothèque de documents locale ou liée à un compte, des dossiers, le scan de pages et plusieurs outils PDF. L’API Spring Boot fournit l’authentification JWT et le stockage privé des documents.
+Kaly est une application de gestion et de préparation de documents. Le frontend Angular propose une bibliothèque de documents locale ou liée à un compte, des dossiers, le scan de pages et plusieurs outils PDF. L’API Laravel fournit l’authentification JWT et le stockage privé des documents.
 
 ## Démarrer le frontend
 
@@ -33,60 +33,52 @@ Les outils PDF traitent les fichiers dans le navigateur. Les documents créés o
 
 ## API backend
 
-Prérequis : Java 25 et MySQL 8.4. Depuis `backend/`, lancer `.\mvnw.cmd test` pour vérifier l’API sans MySQL (les tests utilisent H2).
-
-Pour démarrer immédiatement une instance locale isolée, sans toucher à MySQL ni créer de fichier `.env`, lancer depuis `backend/` :
+Le backend est une API Laravel 12 (PHP 8.2+) avec MySQL en déploiement et SQLite possible en développement local. Depuis `backend/` :
 
 ```powershell
-.\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=local"
+Copy-Item .env.example .env
+composer install
+php artisan key:generate
 ```
 
-Le profil `local` utilise une base H2 dédiée dans `%USERPROFILE%\.kaly\local-demo.mv.db`, liée uniquement à `127.0.0.1`, et crée les comptes de démonstration ci-dessous. Ces identifiants sont réservés au profil local, ne pas les réutiliser en production. L’interface de développement doit être ouverte sur `http://localhost:4210` pour que CORS et le proxy API correspondent à cette configuration.
+Configure ensuite `KALY_JWT_SECRET` dans `.env` avec au moins 32 octets aléatoires. Le profil de développement utilise SQLite par défaut; lancer les migrations puis l’API :
 
-| Rôle | Adresse | Mot de passe |
-|---|---|---|
-| Administrateur | `admin@kaly.local` | `password54321` |
-| Utilisateur | `user@kaly.local` | `kinda6543210` |
+```powershell
+php artisan migrate
+php artisan serve --host=127.0.0.1 --port=8080
+```
 
-L’API de développement se configure par variables d’environnement :
+Les appels du frontend passent par le proxy `/api` vers `localhost:8080`. Les tests utilisent SQLite en mémoire :
 
-- `DB_URL` (par défaut `jdbc:mysql://localhost:3306/kaly?...`)
-- `DB_USER` et `DB_PASSWORD`
-- `KALY_JWT_SECRET` (obligatoire, au moins 32 caractères)
-- `KALY_STORAGE_DIR` (par défaut `./data/documents`)
-- `KALY_CORS_ORIGIN` (par défaut `http://localhost:4200`)
+```powershell
+php artisan test
+```
 
-Routes disponibles :
+Les endpoints et leurs formats JSON restent compatibles avec Angular :
 
-- `POST /api/auth/register` et `POST /api/auth/login` : crée un compte USER ou ouvre une session JWT.
-- `GET /api/auth/me` : renvoie l’identité et le rôle du compte connecté.
-- `POST /api/auth/password-reset` et `POST /api/auth/password-reset/confirm` : envoie un lien de réinitialisation à usage unique (30 minutes) et change le mot de passe.
-- `GET /api/notifications` et `GET /api/notifications/unread-count` : liste les 50 notifications les plus récentes du compte et son nombre de notifications non lues.
-- `PATCH /api/notifications/{id}/read` et `PATCH /api/notifications/read-all` : marque une notification ou toutes les notifications du compte comme lues.
-- `GET/POST /api/admin/users` et `PATCH /api/admin/users/{id}/enabled` : réservés aux ADMIN; listent les comptes, créent un utilisateur/admin et activent/désactivent un compte. Le dernier admin actif et le compte admin courant ne peuvent pas être désactivés.
-- `GET /api/documents` : liste les métadonnées des documents du compte.
-- `POST /api/documents` : téléverse un PDF, JPEG ou PNG (`multipart/form-data`, champ `file`).
-- `GET /api/documents/{id}/content`, `PUT /api/documents/{id}/name`, `PUT /api/documents/{id}/folder` et `DELETE /api/documents/{id}` : lire, renommer, déplacer et supprimer un document appartenant au compte.
-- `GET/POST /api/folders`, `PUT/DELETE /api/folders/{id}` : lister, créer, renommer et supprimer ses dossiers. Supprimer un dossier conserve ses documents en les laissant sans dossier.
-- `POST /api/pdf/merge` : fusionne au moins deux PDF/images (`multipart/form-data`, champs `files`).
+- `POST /api/auth/register`, `POST /api/auth/login` et `GET /api/auth/me`.
+- `POST /api/auth/password-reset` et `/api/auth/password-reset/confirm`.
+- `GET/POST /api/documents`, `GET /api/documents/{id}/content`, `PUT /api/documents/{id}/name`, `PUT /api/documents/{id}/folder` et `DELETE /api/documents/{id}`.
+- `GET/POST /api/folders`, `PUT/DELETE /api/folders/{id}`.
+- `GET /api/notifications`, `GET /api/notifications/unread-count`, `PATCH /api/notifications/{id}/read` et `PATCH /api/notifications/read-all`.
+- `GET/POST /api/admin/users` et `PATCH /api/admin/users/{id}/enabled` (rôle ADMIN).
+- `POST /api/pdf/merge` (JWT requis).
 
-Sauf les routes d’authentification, les endpoints nécessitent `Authorization: Bearer TOKEN_JWT`. Flyway crée les tables dans la base MySQL `kaly`, qui doit être accessible. Les fichiers sont stockés hors MySQL avec une clé aléatoire; l’API vérifie la propriété avant de les servir.
+Les routes privées nécessitent `Authorization: Bearer TOKEN_JWT`. Les identifiants, rôles, noms de colonnes et données historiques Flyway sont conservés; la migration Laravel ne recrée pas les tables Kaly déjà présentes. Pour réutiliser les fichiers existants, configure `KALY_STORAGE_DIR` sur le même répertoire de stockage. Les mots de passe BCrypt et les JWT émis par l’ancien backend restent compatibles si le secret JWT n’est pas changé.
 
-La récupération de mot de passe est désactivée par défaut. Pour l’activer, configurer `KALY_PASSWORD_RESET_ENABLED=true`, un serveur SMTP (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_AUTH`, `SMTP_STARTTLS`), l’expéditeur `KALY_MAIL_FROM` et l’URL publique de Kaly `KALY_FRONTEND_URL`. Sans SMTP valide, la demande renvoie une erreur explicite et aucun lien n’est prétendu envoyé.
+La récupération de mot de passe est désactivée par défaut. Pour l’activer, configure `KALY_PASSWORD_RESET_ENABLED=true`, le serveur SMTP (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_AUTH`, `SMTP_STARTTLS`), `KALY_MAIL_FROM` et `KALY_FRONTEND_URL`. Les jetons sont à usage unique et expirent après 30 minutes; une erreur SMTP est renvoyée explicitement.
 
-Les routes privées nécessitent un JWT dans l’en-tête `Authorization`; `/api/admin/**` nécessite en plus le rôle ADMIN. Les comptes de démonstration `admin@kaly.local` et `user@kaly.local` sont créés uniquement avec le profil Spring `dev` et `KALY_DEMO_ACCOUNTS_ENABLED=true`. Définir les mots de passe `KALY_DEMO_ADMIN_PASSWORD` et `KALY_DEMO_USER_PASSWORD` dans l’environnement; chacun doit compter au moins 12 caractères. Les valeurs d’exemple sont des marqueurs à remplacer, pas des identifiants par défaut. Dans Docker Compose, lancer avec un projet et des volumes dédiés au développement (par exemple `docker compose -p kaly-dev up --build`) afin de ne pas créer de comptes de test dans une base de production. Les identifiants déjà présents ne sont jamais modifiés par le seed.
-
-Exception aux routes d’authentification publiques : `GET /api/auth/me` nécessite un JWT valide.
+Les comptes de démonstration ne sont créés que si `APP_ENV=local` ou `development` et `KALY_DEMO_ACCOUNTS_ENABLED=true`. Définis `KALY_DEMO_ADMIN_PASSWORD` et `KALY_DEMO_USER_PASSWORD` (12 caractères minimum), puis lance `php artisan db:seed`. N’active jamais ces comptes sur une instance de production. Les comptes existants ne sont pas modifiés.
 
 ## Déploiement Docker
 
-Copier `.env.example` vers `.env`, remplacer les mots de passe et le secret JWT par des valeurs fortes, puis lancer :
+Copier `.env.example` vers `.env`, définir des valeurs fortes pour `DB_PASSWORD` et `MYSQL_ROOT_PASSWORD`, puis générer `APP_KEY` et `KALY_JWT_SECRET` (par exemple avec `php artisan key:generate --show` dans `backend/` et `php -r "echo bin2hex(random_bytes(32)), PHP_EOL;"`). Reporter ces valeurs dans le `.env` à la racine avant de lancer :
 
 ```powershell
 docker compose up --build
 ```
 
-Pour les comptes de démonstration, utiliser une base et des volumes dédiés au développement, puis définir `SPRING_PROFILES_ACTIVE=dev`, `KALY_DEMO_ACCOUNTS_ENABLED=true` et les deux mots de passe dans `.env` avant de lancer `docker compose -p kaly-dev up --build`. Ne pas activer ce profil sur un déploiement de production.
+Pour les comptes de démonstration, utiliser une base et des volumes dédiés au développement, puis définir `APP_ENV=local`, `KALY_DEMO_ACCOUNTS_ENABLED=true` et les deux mots de passe dans `.env` avant de lancer `docker compose -p kaly-dev up --build`. Ne pas activer cette option sur un déploiement de production.
 
 Le frontend est servi sur `http://localhost:4200`, l’API sur `http://localhost:8080` et MySQL écoute uniquement dans le réseau Compose. En développement, Angular relaie les appels `/api` vers le backend; en déploiement, Nginx relaie ces mêmes appels vers le service API. Le navigateur n’a donc pas besoin d’une URL d’API codée en dur ni d’un accès CORS inter-origines.
 
@@ -95,9 +87,9 @@ Le lien externe du bouton « Soutenir financièrement » se configure dans `fron
 ## Architecture
 
 - `frontend/` : Angular, TypeScript, SCSS et Lucide Angular.
-- `backend/` : API REST Spring Boot organisée en couches controller, service, repository, entity, DTO, sécurité et gestion des erreurs.
+- `backend/` : API REST Laravel organisée en contrôleurs, services, modèles, middleware JWT et gestion JSON des erreurs.
 - MySQL avec Flyway pour les métadonnées; fichiers dans un répertoire serveur configurable, hors de la base.
-- Apache PDFBox pour la fusion, JWT et BCrypt pour l’authentification.
+- FPDI/FPDF pour la fusion, JWT et BCrypt pour l’authentification.
 - Docker Compose pour le frontend, l’API et MySQL.
 
 ## Étapes restant à développer
@@ -118,5 +110,5 @@ npm test -- --watch=false
 Depuis `backend/` :
 
 ```powershell
-.\mvnw.cmd test
+php artisan test
 ```

@@ -4,16 +4,16 @@
 		{
 			"label": "Kaly Backend (local)",
 			"type": "shell",
-			"command": "backend\\mvnw.cmd",
+			"command": "php",
 			"args": [
-				"-f",
-				"backend\\pom.xml",
-				"spring-boot:run",
-				{
-					"value": "-Dspring-boot.run.profiles=local",
-					"quoting": "strong"
-				}
+				"artisan",
+				"serve",
+				"--host=127.0.0.1",
+				"--port=8080"
 			],
+			"options": {
+				"cwd": "${workspaceFolder}\\backend"
+			},
 			"isBackground": true,
 			"problemMatcher": []
 		}

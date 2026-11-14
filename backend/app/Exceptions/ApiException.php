@@ -1,0 +1,15 @@
+<?php
+
+namespace App\Exceptions;
+
+use RuntimeException;
+
+class ApiException extends RuntimeException
+{
+    public function __construct(
+        string $message,
+        public readonly int $status,
+    ) {
+        parent::__construct($message);
+    }
+}
