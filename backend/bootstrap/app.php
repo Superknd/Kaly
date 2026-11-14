@@ -30,6 +30,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
             $status = 500;
             $message = 'Une erreur interne est survenue.';
+            $headers = [];
 
             if ($exception instanceof \App\Exceptions\ApiException) {
                 $status = $exception->status;
@@ -43,10 +44,12 @@ return Application::configure(basePath: dirname(__DIR__))
                 $message = 'La ressource demandée est introuvable.';
             } elseif ($exception instanceof HttpExceptionInterface) {
                 $status = $exception->getStatusCode();
+                $headers = $exception->getHeaders();
                 $message = match ($status) {
                     401 => 'Authentification requise.',
                     403 => 'Accès interdit.',
                     404 => 'La ressource demandée est introuvable.',
+                    429 => 'Trop de tentatives. Réessayez dans une minute.',
                     413 => 'La taille maximale de la requête est de 100 Mo.',
                     default => 'La requête ne peut pas être traitée.',
                 };
@@ -61,6 +64,6 @@ return Application::configure(basePath: dirname(__DIR__))
                 'error' => \Symfony\Component\HttpFoundation\Response::$statusTexts[$status] ?? 'Error',
                 'message' => $message,
                 'path' => $request->getRequestUri(),
-            ], $status);
+            ], $status, $headers);
         });
     })->create();

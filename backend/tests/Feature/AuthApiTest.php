@@ -73,6 +73,27 @@ class AuthApiTest extends TestCase
             ->assertJsonStructure(['timestamp', 'status', 'error', 'message', 'path']);
     }
 
+    public function test_authentication_and_password_reset_routes_are_rate_limited(): void
+    {
+        $routes = [
+            ['/api/auth/login', []],
+            ['/api/auth/register', []],
+            ['/api/auth/password-reset', []],
+            ['/api/auth/password-reset/confirm', []],
+        ];
+
+        foreach ($routes as [$uri, $payload]) {
+            for ($attempt = 0; $attempt < 5; $attempt++) {
+                $this->postJson($uri, $payload)->assertBadRequest();
+            }
+
+            $this->postJson($uri, $payload)
+                ->assertStatus(429)
+                ->assertHeader('Retry-After')
+                ->assertJsonPath('message', 'Trop de tentatives. Réessayez dans une minute.');
+        }
+    }
+
     public function test_duplicate_folder_names_are_rejected_per_owner(): void
     {
         $user = KalyUser::query()->create([

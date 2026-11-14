@@ -9,10 +9,12 @@ use App\Http\Controllers\PdfController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('auth')->group(function (): void {
-    Route::post('/register', [AuthController::class, 'register']);
-    Route::post('/login', [AuthController::class, 'login']);
-    Route::post('/password-reset', [AuthController::class, 'requestPasswordReset']);
-    Route::post('/password-reset/confirm', [AuthController::class, 'confirmPasswordReset']);
+    Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:5,1,auth-register');
+    Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1,auth-login');
+    Route::post('/password-reset', [AuthController::class, 'requestPasswordReset'])
+        ->middleware('throttle:5,1,auth-password-reset');
+    Route::post('/password-reset/confirm', [AuthController::class, 'confirmPasswordReset'])
+        ->middleware('throttle:5,1,auth-password-reset-confirm');
     Route::get('/me', [AuthController::class, 'me'])->middleware('kaly.auth');
 });
 
