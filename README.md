@@ -62,9 +62,14 @@ Les endpoints et leurs formats JSON restent compatibles avec Angular :
 - `GET/POST /api/folders`, `PUT/DELETE /api/folders/{id}`.
 - `GET /api/notifications`, `GET /api/notifications/unread-count`, `PATCH /api/notifications/{id}/read` et `PATCH /api/notifications/read-all`.
 - `GET/POST /api/admin/users` et `PATCH /api/admin/users/{id}/enabled` (rôle ADMIN).
+- `GET /api/admin/stats`, `GET /api/admin/users/{id}/activity`, `PATCH /api/admin/users/{id}/role` et `POST /api/admin/users/{id}/password-reset` (rôle ADMIN).
 - `POST /api/pdf/merge` (JWT requis).
 
+Le formulaire d’inscription est accessible depuis le bouton « Créer un compte » dans l’en-tête ou directement via `/?auth=register`.
+
 Les routes privées nécessitent `Authorization: Bearer TOKEN_JWT`. Les identifiants, rôles, noms de colonnes et données historiques Flyway sont conservés; la migration Laravel ne recrée pas les tables Kaly déjà présentes. Pour réutiliser les fichiers existants, configure `KALY_STORAGE_DIR` sur le même répertoire de stockage. Les mots de passe BCrypt et les JWT émis par l’ancien backend restent compatibles si le secret JWT n’est pas changé.
+
+Le panneau admin permet de rechercher et filtrer les comptes, de modifier les rôles, de désactiver ou réactiver les comptes et d’envoyer un lien de réinitialisation par e-mail si SMTP et la récupération de mot de passe sont configurés. La désactivation conserve les données; aucune suppression définitive de compte n’est proposée. Les statistiques agrègent les comptes, documents, dossiers, notifications et créations des 30 derniers jours. L’activité individuelle ne révèle que des compteurs d’utilisation et le volume stocké, jamais les noms ni le contenu des documents.
 
 La récupération de mot de passe est désactivée par défaut. Pour l’activer, configure `KALY_PASSWORD_RESET_ENABLED=true`, le serveur SMTP (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_AUTH`, `SMTP_STARTTLS`), `KALY_MAIL_FROM` et `KALY_FRONTEND_URL`. Les jetons sont à usage unique et expirent après 30 minutes; une erreur SMTP est renvoyée explicitement.
 

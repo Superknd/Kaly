@@ -29,6 +29,8 @@ php artisan test
 
 Feature tests use SQLite in memory. `php artisan migrate` does not recreate or drop the existing Flyway-managed Kaly tables; document files remain outside the database in `KALY_STORAGE_DIR`.
 
+Admin-only endpoints provide global usage and 30-day account/document creation statistics, per-account aggregate usage (document, folder, notification counts and storage size), account role changes, and password-reset email requests. They never return document names or content. Accounts can be disabled or re-enabled without deleting their data. Password-reset emails require `KALY_PASSWORD_RESET_ENABLED=true` and a working SMTP configuration.
+
 ## Docker
 
 The project root's `docker-compose.yml` runs Laravel with Apache/PHP and MySQL. The backend container applies Laravel migrations at startup. Set `APP_KEY`, `KALY_JWT_SECRET`, and the database passwords in the root `.env` before starting Compose.

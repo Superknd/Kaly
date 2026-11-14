@@ -6,20 +6,20 @@ use App\Exceptions\ApiException;
 use App\Models\KalyUser;
 use App\Services\JwtService;
 use App\Services\NotificationService;
+use App\Services\PasswordResetService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
-use Throwable;
 
 class AuthController extends Controller
 {
     public function __construct(
         private readonly JwtService $jwt,
         private readonly NotificationService $notifications,
-    ) {
-    }
+        private readonly PasswordResetService $passwordResets,
+    ) {}
 
     public function register(Request $request): JsonResponse
     {
@@ -61,7 +61,7 @@ class AuthController extends Controller
             ->where('email', mb_strtolower(trim($input['email'])))
             ->first();
 
-        if (!$user || !$user->enabled || !password_verify($input['password'], $user->password_hash)) {
+        if (! $user || ! $user->enabled || ! password_verify($input['password'], $user->password_hash)) {
             throw new ApiException('Adresse e-mail ou mot de passe incorrect.', 401);
         }
 
@@ -79,7 +79,7 @@ class AuthController extends Controller
             'email' => ['required', 'string', 'email', 'max:254'],
         ]);
 
-        if (!config('kaly.password_reset_enabled')) {
+        if (! config('kaly.password_reset_enabled')) {
             throw new ApiException('La récupération de mot de passe n’est pas configurée sur cette instance.', 503);
         }
 
@@ -89,45 +89,13 @@ class AuthController extends Controller
             ->first();
 
         if ($user) {
-            $token = rtrim(strtr(base64_encode(random_bytes(32)), '+/', '-_'), '=');
-            $now = now();
-
-            DB::transaction(function () use ($user, $token, $now): void {
-                DB::table('password_reset_tokens')->where('expires_at', '<', $now)->delete();
-                DB::table('password_reset_tokens')->where('user_id', $user->id)->delete();
-                DB::table('password_reset_tokens')->insert([
-                    'id' => (string) Str::uuid(),
-                    'token_hash' => hash('sha256', $token),
-                    'user_id' => $user->id,
-                    'created_at' => $now,
-                    'expires_at' => $now->copy()->addMinutes(30),
-                ]);
-
-                $separator = str_contains((string) config('kaly.frontend_url'), '?') ? '&' : '?';
-                $url = rtrim((string) config('kaly.frontend_url'), '&?')
-                    .$separator.http_build_query(['resetToken' => $token]);
-                $text = "Bonjour {$user->display_name},\n\n"
-                    ."Une demande de réinitialisation du mot de passe de votre compte Kaly a été reçue.\n"
-                    ."Utilisez ce lien dans les 30 prochaines minutes :\n\n{$url}\n\n"
-                    ."Si vous n’êtes pas à l’origine de cette demande, ignorez ce message.";
-
-                try {
-                    Mail::raw($text, function ($mail) use ($user): void {
-                        $mail->from(config('kaly.mail_from'))
-                            ->to($user->email)
-                            ->subject('Réinitialisation de votre mot de passe Kaly');
-                    });
-                } catch (Throwable $exception) {
-                    report($exception);
-                    throw new ApiException('Le service d’envoi d’e-mails est indisponible. Réessayez plus tard.', 503);
-                }
-            });
+            $this->passwordResets->sendLink($user);
         }
 
         return response()->json(['message' => $message], 202);
     }
 
-    public function confirmPasswordReset(Request $request): \Illuminate\Http\Response
+    public function confirmPasswordReset(Request $request): Response
     {
         $input = $request->validate([
             'token' => ['required', 'string', 'max:128'],
@@ -135,7 +103,7 @@ class AuthController extends Controller
         ]);
         $this->validatePasswordBytes($input['password']);
 
-        if (!config('kaly.password_reset_enabled')) {
+        if (! config('kaly.password_reset_enabled')) {
             throw new ApiException('La récupération de mot de passe n’est pas configurée sur cette instance.', 503);
         }
 
@@ -145,7 +113,7 @@ class AuthController extends Controller
                 ->lockForUpdate()
                 ->first();
 
-            if (!$token || $token->used_at !== null || now()->greaterThanOrEqualTo($token->expires_at)) {
+            if (! $token || $token->used_at !== null || now()->greaterThanOrEqualTo($token->expires_at)) {
                 throw new ApiException('Ce lien de réinitialisation est invalide ou a expiré.', 400);
             }
 

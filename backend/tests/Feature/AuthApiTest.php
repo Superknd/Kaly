@@ -3,7 +3,9 @@
 namespace Tests\Feature;
 
 use App\Models\KalyUser;
+use App\Services\JwtService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
@@ -35,6 +37,11 @@ class AuthApiTest extends TestCase
             ->assertJsonStructure(['token', 'user' => ['id', 'displayName', 'email', 'role']]);
 
         $token = $response->json('token');
+        $this->postJson('/api/auth/login', [
+            'email' => 'member@example.test',
+            'password' => 'long-enough-password',
+        ])->assertOk()->assertJsonPath('user.id', $response->json('user.id'));
+
         $this->withHeader('Authorization', 'Bearer '.$token)
             ->getJson('/api/auth/me')
             ->assertOk()
@@ -105,7 +112,7 @@ class AuthApiTest extends TestCase
             'enabled' => true,
             'created_at' => now(),
         ]);
-        $token = app(\App\Services\JwtService::class)->issue($user);
+        $token = app(JwtService::class)->issue($user);
 
         $this->withHeader('Authorization', 'Bearer '.$token)
             ->postJson('/api/folders', ['name' => 'Scans'])
@@ -147,7 +154,7 @@ class AuthApiTest extends TestCase
         $this->assertSame(hash('sha256', $rawToken), $savedToken->token_hash);
         $this->assertEqualsWithDelta(
             1800,
-            now()->diffInSeconds(\Illuminate\Support\Carbon::parse($savedToken->expires_at)),
+            now()->diffInSeconds(Carbon::parse($savedToken->expires_at)),
             1.0,
         );
 
@@ -172,7 +179,7 @@ class AuthApiTest extends TestCase
             'enabled' => true,
             'created_at' => now(),
         ]);
-        $token = app(\App\Services\JwtService::class)->issue($user);
+        $token = app(JwtService::class)->issue($user);
 
         $this->withToken($token)
             ->getJson('/api/admin/users')

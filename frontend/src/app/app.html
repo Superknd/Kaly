@@ -120,6 +120,9 @@
           </button>
         } @else {
           <button class="text-button auth-top-button" type="button" (click)="openAuth('login')"><svg lucideLogIn /> Connexion</button>
+          <a class="button button-primary auth-register-link" href="?auth=register" (click)="openAuth('register', $event)">
+            <svg lucideUserPlus /> Créer un compte
+          </a>
         }
       </div>
     </header>
@@ -185,16 +188,16 @@
               </button>
             </form>
             @if (authMode() === 'login') {
-              <button class="text-button auth-forgot" type="button" (click)="authMode.set('forgot')">Mot de passe oublié ?</button>
+              <button class="text-button auth-forgot" type="button" (click)="setAuthMode('forgot')">Mot de passe oublié ?</button>
               <p class="auth-switch">Vous n’avez pas encore de compte ?
-                <button class="text-button" type="button" (click)="authMode.set('register')">Créer un compte</button>
+                <button class="text-button" type="button" (click)="setAuthMode('register')">Créer un compte</button>
               </p>
             } @else if (authMode() === 'register') {
               <p class="auth-switch">Vous avez déjà un compte ?
-                <button class="text-button" type="button" (click)="authMode.set('login')">Se connecter</button>
+                <button class="text-button" type="button" (click)="setAuthMode('login')">Se connecter</button>
               </p>
             } @else {
-              <button class="text-button auth-guest" type="button" (click)="authMode.set('login')">Retour à la connexion</button>
+              <button class="text-button auth-guest" type="button" (click)="setAuthMode('login')">Retour à la connexion</button>
             }
             <button class="text-button auth-guest" type="button" (click)="navigate('home')">Continuer sans compte</button>
           </div>
@@ -236,9 +239,56 @@
 
       @if (activeView() === 'admin' && authUser()?.role === 'ADMIN') {
         <section class="page-heading">
-          <div><p class="eyebrow">ESPACE SÉCURISÉ</p><h1>Administration</h1><p class="subheading">Gérez les comptes et leurs accès. La désactivation ne supprime pas les documents.</p></div>
+          <div><p class="eyebrow">ESPACE SÉCURISÉ</p><h1>Administration</h1><p class="subheading">Gérez les comptes, les rôles et les accès. La désactivation conserve les données.</p></div>
           <span class="admin-count"><svg lucideUserRound /> {{ adminUserCount() }} compte{{ adminUserCount() > 1 ? 's' : '' }}</span>
         </section>
+        @if (adminStats(); as stats) {
+          <section class="admin-stats-grid" aria-label="Statistiques globales de Kaly">
+            <article class="admin-stat-card">
+              <span class="admin-stat-label">Comptes</span>
+              <strong>{{ stats.users.total }}</strong>
+              <small>{{ stats.users.active }} actifs · {{ stats.users.disabled }} désactivés</small>
+              <small>{{ stats.users.admins }} administrateurs · {{ stats.users.members }} utilisateurs</small>
+            </article>
+            <article class="admin-stat-card">
+              <span class="admin-stat-label">Documents stockés</span>
+              <strong>{{ stats.documents.total }}</strong>
+              <small>{{ formatBytes(stats.documents.storageBytes) }} utilisés au total</small>
+            </article>
+            <article class="admin-stat-card">
+              <span class="admin-stat-label">Dossiers</span>
+              <strong>{{ stats.folders.total }}</strong>
+              <small>dans les espaces personnels</small>
+            </article>
+            <article class="admin-stat-card">
+              <span class="admin-stat-label">Notifications</span>
+              <strong>{{ stats.notifications.total }}</strong>
+              <small>{{ stats.notifications.unread }} non lues</small>
+            </article>
+          </section>
+          <section class="admin-trends" aria-label="Tendances des 30 derniers jours">
+            <article class="admin-trend-card">
+              <div><h2>Nouveaux comptes</h2><p>Créations par jour · 30 derniers jours</p></div>
+              <div class="admin-trend-chart" role="img" aria-label="Nouveaux comptes créés chaque jour">
+                @for (point of stats.trends.usersCreated; track point.date) {
+                  <span [style.height.%]="trendBarHeight(adminUserTrendValues(), point.count)" [attr.title]="formatTrendDate(point.date) + ' : ' + point.count"></span>
+                }
+              </div>
+              <div class="admin-trend-axis"><span>{{ formatTrendDate(stats.trends.usersCreated[0].date) }}</span><strong>{{ stats.users.total }} au total</strong><span>Aujourd’hui</span></div>
+            </article>
+            <article class="admin-trend-card">
+              <div><h2>Nouveaux documents</h2><p>Ajouts par jour · 30 derniers jours</p></div>
+              <div class="admin-trend-chart document-trend-chart" role="img" aria-label="Documents ajoutés chaque jour">
+                @for (point of stats.trends.documentsCreated; track point.date) {
+                  <span [style.height.%]="trendBarHeight(adminDocumentTrendValues(), point.count)" [attr.title]="formatTrendDate(point.date) + ' : ' + point.count + ' document(s), ' + formatBytes(point.storageBytes)"></span>
+                }
+              </div>
+              <div class="admin-trend-axis"><span>{{ formatTrendDate(stats.trends.documentsCreated[0].date) }}</span><strong>{{ formatBytes(stats.documents.storageBytes) }} au total</strong><span>Aujourd’hui</span></div>
+            </article>
+          </section>
+        } @else {
+          <div class="admin-stats-loading" role="status">Chargement des statistiques…</div>
+        }
         <section class="admin-layout">
           <article class="settings-card admin-create-card">
             <span class="settings-icon"><svg lucideUserPlus /></span>
@@ -262,20 +312,69 @@
             </form>
           </article>
           <section class="settings-card admin-list-card">
-            <div class="admin-list-heading"><div><h2>Comptes Kaly</h2><p>{{ adminUsers().length }} utilisateur{{ adminUsers().length > 1 ? 's' : '' }}</p></div><button class="icon-button" type="button" (click)="refreshAdminUsers()" [disabled]="adminBusy()" aria-label="Actualiser la liste"><svg lucideRotateCw /></button></div>
+            <div class="admin-list-heading">
+              <div><h2>Comptes Kaly</h2><p>{{ filteredAdminUsers().length }} affiché{{ filteredAdminUsers().length > 1 ? 's' : '' }} sur {{ adminUsers().length }}</p></div>
+              <button class="icon-button" type="button" (click)="refreshAdminUsers()" [disabled]="adminBusy()" aria-label="Actualiser les comptes et statistiques"><svg lucideRotateCw /></button>
+            </div>
+            <div class="admin-user-filters">
+              <label class="admin-search">
+                <svg lucideSearch />
+                <input type="search" aria-label="Rechercher un compte" placeholder="Nom ou adresse e-mail" [value]="adminSearch()" (input)="adminSearch.set($any($event.target).value)" />
+              </label>
+              <label><span>Statut</span>
+                <select class="text-input" aria-label="Filtrer par statut" [value]="adminStatusFilter()" (change)="adminStatusFilter.set($any($event.target).value)">
+                  <option value="all">Tous les statuts</option><option value="active">Actifs</option><option value="disabled">Désactivés</option>
+                </select>
+              </label>
+              <label><span>Rôle</span>
+                <select class="text-input" aria-label="Filtrer par rôle" [value]="adminRoleFilter()" (change)="adminRoleFilter.set($any($event.target).value)">
+                  <option value="all">Tous les rôles</option><option value="USER">Utilisateurs</option><option value="ADMIN">Administrateurs</option>
+                </select>
+              </label>
+            </div>
             @if (adminUsers().length === 0) {
               <div class="notification-empty">Aucun compte disponible.</div>
+            } @else if (filteredAdminUsers().length === 0) {
+              <div class="notification-empty">Aucun compte ne correspond à ces filtres.</div>
             } @else {
               <div class="admin-user-list">
-                @for (user of adminUsers(); track user.id) {
+                @for (user of filteredAdminUsers(); track user.id) {
                   <article class="admin-user-row">
-                    <span class="avatar admin-user-avatar">{{ user.displayName.charAt(0).toUpperCase() }}</span>
-                    <span class="admin-user-details"><strong>{{ user.displayName }}</strong><small>{{ user.email }}</small><small>Créé le {{ user.createdAt | date:'d MMM yyyy' }}</small></span>
-                    <span class="role-badge" [class.role-admin]="user.role === 'ADMIN'">{{ user.role === 'ADMIN' ? 'Admin' : 'Utilisateur' }}</span>
-                    <span class="account-state" [class.account-disabled]="!user.enabled">{{ user.enabled ? 'Actif' : 'Désactivé' }}</span>
-                    @if (user.id !== authUser()?.id) {
-                      <button class="button button-secondary account-action" type="button" (click)="toggleManagedUser(user)" [disabled]="adminBusy()">{{ user.enabled ? 'Désactiver' : 'Réactiver' }}</button>
-                    } @else { <small class="current-account">Vous</small> }
+                    <div class="admin-user-main">
+                      <span class="avatar admin-user-avatar">{{ user.displayName.charAt(0).toUpperCase() }}</span>
+                      <span class="admin-user-details"><strong>{{ user.displayName }}</strong><small>{{ user.email }}</small><small>Créé le {{ user.createdAt | date:'d MMM yyyy' }}</small></span>
+                      <span class="role-badge" [class.role-admin]="user.role === 'ADMIN'">{{ user.role === 'ADMIN' ? 'Admin' : 'Utilisateur' }}</span>
+                      <span class="account-state" [class.account-disabled]="!user.enabled">{{ user.enabled ? 'Actif' : 'Désactivé' }}</span>
+                    </div>
+                    <div class="admin-user-actions">
+                      <button class="button button-secondary account-action" type="button" (click)="toggleManagedUserActivity(user)" [attr.aria-expanded]="expandedAdminUserId() === user.id" [disabled]="adminBusy() || activityLoadingUserId() === user.id">
+                        {{ activityLoadingUserId() === user.id ? 'Chargement…' : expandedAdminUserId() === user.id ? 'Masquer l’usage' : 'Voir l’usage' }}
+                      </button>
+                      @if (user.id !== authUser()?.id) {
+                        <label class="admin-role-control">
+                          <span>Modifier le rôle</span>
+                          <select class="text-input" [value]="user.role" (change)="changeManagedUserRole(user, $event)" [disabled]="adminBusy()" [attr.aria-label]="'Modifier le rôle de ' + user.email">
+                            <option value="USER">Utilisateur</option><option value="ADMIN">Administrateur</option>
+                          </select>
+                        </label>
+                      } @else { <small class="current-account">Votre compte</small> }
+                      <button class="button button-secondary account-action" type="button" (click)="requestManagedUserPasswordReset(user)" [disabled]="adminBusy() || !user.enabled">Envoyer un lien de réinitialisation</button>
+                      @if (user.id !== authUser()?.id) {
+                        <button class="button button-secondary account-action" type="button" (click)="toggleManagedUser(user)" [disabled]="adminBusy()">{{ user.enabled ? 'Désactiver' : 'Réactiver' }}</button>
+                      }
+                    </div>
+                    @if (expandedAdminUserId() === user.id) {
+                      @if (activityLoadingUserId() === user.id) {
+                        <div class="admin-user-activity" role="status">Chargement des statistiques du compte…</div>
+                      } @else if (adminUserActivity()[user.id]; as activity) {
+                        <div class="admin-user-activity" aria-label="Utilisation du compte">
+                          <span><strong>{{ activity.documents }}</strong><small>documents</small></span>
+                          <span><strong>{{ formatBytes(activity.storageBytes) }}</strong><small>stockage</small></span>
+                          <span><strong>{{ activity.folders }}</strong><small>dossiers</small></span>
+                          <span><strong>{{ activity.notifications }}</strong><small>notifications</small></span>
+                        </div>
+                      }
+                    }
                   </article>
                 }
               </div>

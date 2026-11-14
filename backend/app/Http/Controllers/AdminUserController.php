@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Exceptions\ApiException;
 use App\Models\KalyUser;
 use App\Services\NotificationService;
+use App\Services\PasswordResetService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -13,15 +14,67 @@ use Illuminate\Validation\Rule;
 
 class AdminUserController extends Controller
 {
-    public function __construct(private readonly NotificationService $notifications)
+    public function __construct(
+        private readonly NotificationService $notifications,
+        private readonly PasswordResetService $passwordResets,
+    ) {}
+
+    public function stats(): JsonResponse
     {
+        $start = now()->startOfDay()->subDays(29);
+        $usersByDay = DB::table('app_users')
+            ->selectRaw('DATE(created_at) as day, COUNT(*) as count')
+            ->where('created_at', '>=', $start)
+            ->groupByRaw('DATE(created_at)')
+            ->pluck('count', 'day');
+        $documentsByDay = DB::table('documents')
+            ->selectRaw('DATE(created_at) as day, COUNT(*) as count, COALESCE(SUM(size_bytes), 0) as storage_bytes')
+            ->where('created_at', '>=', $start)
+            ->groupByRaw('DATE(created_at)')
+            ->get()
+            ->keyBy('day');
+
+        $userTrend = [];
+        $documentTrend = [];
+        for ($offset = 0; $offset < 30; $offset++) {
+            $day = $start->copy()->addDays($offset)->toDateString();
+            $documentRow = $documentsByDay->get($day);
+            $userTrend[] = ['date' => $day, 'count' => (int) $usersByDay->get($day, 0)];
+            $documentTrend[] = [
+                'date' => $day,
+                'count' => (int) ($documentRow->count ?? 0),
+                'storageBytes' => (int) ($documentRow->storage_bytes ?? 0),
+            ];
+        }
+
+        return response()->json([
+            'users' => [
+                'total' => KalyUser::query()->count(),
+                'active' => KalyUser::query()->where('enabled', true)->count(),
+                'disabled' => KalyUser::query()->where('enabled', false)->count(),
+                'admins' => KalyUser::query()->where('role', 'ADMIN')->count(),
+                'members' => KalyUser::query()->where('role', 'USER')->count(),
+            ],
+            'documents' => [
+                'total' => DB::table('documents')->count(),
+                'storageBytes' => (int) DB::table('documents')->sum('size_bytes'),
+            ],
+            'folders' => ['total' => DB::table('folders')->count()],
+            'notifications' => [
+                'total' => DB::table('user_notifications')->count(),
+                'unread' => DB::table('user_notifications')->whereNull('read_at')->count(),
+            ],
+            'trends' => [
+                'usersCreated' => $userTrend,
+                'documentsCreated' => $documentTrend,
+            ],
+        ]);
     }
 
     public function index(): JsonResponse
     {
         $users = KalyUser::query()
-            ->orderBy('created_at')
-            ->limit(100)
+            ->orderByDesc('created_at')
             ->get()
             ->map(fn (KalyUser $user): array => $this->userResponse($user));
 
@@ -58,6 +111,97 @@ class AdminUserController extends Controller
         return response()->json($this->userResponse($user), 201);
     }
 
+    public function activity(string $id): JsonResponse
+    {
+        $user = KalyUser::query()->whereKey($id)->first();
+        if (! $user) {
+            throw new ApiException('Compte utilisateur introuvable.', 404);
+        }
+
+        $documentUsage = DB::table('documents')
+            ->where('owner_id', $user->id)
+            ->selectRaw('COUNT(*) as count, COALESCE(SUM(size_bytes), 0) as storage_bytes')
+            ->first();
+
+        return response()->json([
+            'userId' => $user->id,
+            'documents' => (int) $documentUsage->count,
+            'storageBytes' => (int) $documentUsage->storage_bytes,
+            'folders' => DB::table('folders')->where('owner_id', $user->id)->count(),
+            'notifications' => DB::table('user_notifications')->where('user_id', $user->id)->count(),
+        ]);
+    }
+
+    public function setRole(Request $request, string $id): JsonResponse
+    {
+        $input = $request->validate(['role' => ['required', Rule::in(['USER', 'ADMIN'])]]);
+        $actor = $request->attributes->get('kalyUser');
+
+        $user = DB::transaction(function () use ($id, $input, $actor): KalyUser {
+            $user = KalyUser::query()->whereKey($id)->lockForUpdate()->first();
+            if (! $user) {
+                throw new ApiException('Compte utilisateur introuvable.', 404);
+            }
+
+            $role = $input['role'];
+            if ($actor->id === $user->id && $user->role !== $role) {
+                throw new ApiException('Vous ne pouvez pas modifier votre propre rôle.', 400);
+            }
+            if ($user->enabled && $user->role === 'ADMIN' && $role !== 'ADMIN') {
+                $activeAdmins = KalyUser::query()
+                    ->where('role', 'ADMIN')
+                    ->where('enabled', true)
+                    ->lockForUpdate()
+                    ->count();
+                if ($activeAdmins <= 1) {
+                    throw new ApiException('Le dernier compte administrateur actif ne peut pas être rétrogradé.', 409);
+                }
+            }
+
+            if ($user->role !== $role) {
+                $user->role = $role;
+                $user->save();
+                $this->notifications->create(
+                    $user->id,
+                    'Rôle du compte modifié',
+                    $role === 'ADMIN'
+                        ? 'Votre compte dispose maintenant des droits administrateur.'
+                        : 'Les droits de votre compte ont été modifiés.',
+                    'account',
+                );
+            }
+
+            return $user;
+        });
+
+        return response()->json($this->userResponse($user));
+    }
+
+    public function sendPasswordReset(string $id): JsonResponse
+    {
+        if (! config('kaly.password_reset_enabled')) {
+            throw new ApiException('La récupération de mot de passe n’est pas configurée sur cette instance.', 503);
+        }
+
+        $user = KalyUser::query()->whereKey($id)->first();
+        if (! $user) {
+            throw new ApiException('Compte utilisateur introuvable.', 404);
+        }
+        if (! $user->enabled) {
+            throw new ApiException('Réactivez le compte avant de demander une réinitialisation.', 409);
+        }
+
+        $this->passwordResets->sendLink($user);
+        $this->notifications->create(
+            $user->id,
+            'Réinitialisation du mot de passe',
+            'Un administrateur a demandé l’envoi d’un lien de réinitialisation.',
+            'security',
+        );
+
+        return response()->json(['message' => 'Le lien de réinitialisation a été envoyé par e-mail.'], 202);
+    }
+
     public function setEnabled(Request $request, string $id): JsonResponse
     {
         $input = $request->validate(['enabled' => ['required', 'boolean']]);
@@ -70,15 +214,15 @@ class AdminUserController extends Controller
                 ->lockForUpdate()
                 ->get();
             $user = KalyUser::query()->whereKey($id)->lockForUpdate()->first();
-            if (!$user) {
+            if (! $user) {
                 throw new ApiException('Compte utilisateur introuvable.', 404);
             }
 
             $enabled = (bool) $input['enabled'];
-            if (!$enabled && $actor->id === $user->id) {
+            if (! $enabled && $actor->id === $user->id) {
                 throw new ApiException('Vous ne pouvez pas désactiver votre propre compte.', 400);
             }
-            if (!$enabled && $user->role === 'ADMIN' && $user->enabled
+            if (! $enabled && $user->role === 'ADMIN' && $user->enabled
                 && $activeAdmins->count() <= 1) {
                 throw new ApiException('Le dernier compte administrateur actif ne peut pas être désactivé.', 409);
             }

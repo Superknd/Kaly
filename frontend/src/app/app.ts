@@ -15,7 +15,7 @@ import {
 import { DocumentStore, StoredDocument, StoredFolder } from './document-store';
 import { PdfPageThumbnail, PdfTools } from './pdf-tools';
 import { ScanTools } from './scan-tools';
-import { AdminService, ManagedUser } from './admin.service';
+import { AdminService, AdminStats, AdminUserActivity, ManagedUser } from './admin.service';
 import { NotificationsService, UserNotification } from './notifications.service';
 import { AuthService } from './auth.service';
 import { FeatureMarquee } from './feature-marquee';
@@ -80,8 +80,26 @@ export class App implements OnDestroy {
   readonly unreadNotificationCount = signal(0);
   readonly sessionReady = signal(false);
   readonly adminUsers = signal<ManagedUser[]>([]);
+  readonly adminStats = signal<AdminStats | null>(null);
   readonly adminBusy = signal(false);
   readonly adminUserCount = computed(() => this.adminUsers().length);
+  readonly adminUserTrendValues = computed(() => this.adminStats()?.trends.usersCreated.map(point => point.count) ?? []);
+  readonly adminDocumentTrendValues = computed(() => this.adminStats()?.trends.documentsCreated.map(point => point.count) ?? []);
+  readonly adminSearch = signal('');
+  readonly adminStatusFilter = signal<'all' | 'active' | 'disabled'>('all');
+  readonly adminRoleFilter = signal<'all' | ManagedUser['role']>('all');
+  readonly expandedAdminUserId = signal<string | null>(null);
+  readonly adminUserActivity = signal<Record<string, AdminUserActivity>>({});
+  readonly activityLoadingUserId = signal<string | null>(null);
+  readonly filteredAdminUsers = computed(() => {
+    const query = this.adminSearch().trim().toLocaleLowerCase();
+    return this.adminUsers().filter(user =>
+      (!query || user.displayName.toLocaleLowerCase().includes(query) || user.email.toLocaleLowerCase().includes(query)) &&
+      (this.adminStatusFilter() === 'all' ||
+        (this.adminStatusFilter() === 'active' ? user.enabled : !user.enabled)) &&
+      (this.adminRoleFilter() === 'all' || user.role === this.adminRoleFilter())
+    );
+  });
   readonly documents = signal<KalyDocument[]>([]);
   readonly folders = signal<StoredFolder[]>([]);
   readonly folderFilter = signal('all');
@@ -148,12 +166,16 @@ export class App implements OnDestroy {
   readonly cameraVideo = viewChild<ElementRef<HTMLVideoElement>>('cameraVideo');
 
   constructor() {
-    const resetToken = new URLSearchParams(location.search).get('resetToken');
+    const query = new URLSearchParams(location.search);
+    const resetToken = query.get('resetToken');
     if (resetToken) {
       this.resetToken.set(resetToken);
       this.authMode.set('reset');
       this.activeView.set('auth');
       history.replaceState(null, '', location.pathname);
+    } else if (query.get('auth') === 'register') {
+      this.authMode.set('register');
+      this.activeView.set('auth');
     }
     effect(() => {
       const expired = this.auth.sessionExpired();
@@ -178,6 +200,8 @@ export class App implements OnDestroy {
         this.notifications.set([]);
         this.unreadNotificationCount.set(0);
         this.adminUsers.set([]);
+        this.adminStats.set(null);
+        this.adminUserActivity.set({});
         return;
       }
       queueMicrotask(() => {
@@ -203,6 +227,7 @@ export class App implements OnDestroy {
     this.activeView.set(view);
     this.menuOpen.set(false);
     this.notice.set('');
+    if (view !== 'auth') this.updateAuthUrl();
     if (view === 'admin') void this.refreshAdminUsers();
   }
 
@@ -597,9 +622,15 @@ export class App implements OnDestroy {
     this.selectedDocument.set(null);
   }
 
-  openAuth(mode: AuthMode = 'login'): void {
-    this.authMode.set(mode);
+  openAuth(mode: AuthMode = 'login', event?: Event): void {
+    event?.preventDefault();
+    this.setAuthMode(mode);
     this.navigate('auth');
+  }
+
+  setAuthMode(mode: AuthMode): void {
+    this.authMode.set(mode);
+    this.updateAuthUrl(mode === 'register');
   }
 
   async submitAuth(event: SubmitEvent): Promise<void> {
@@ -618,15 +649,17 @@ export class App implements OnDestroy {
     try {
       if (this.authMode() === 'forgot') {
         await this.auth.requestPasswordReset(email);
-        this.authMode.set('login');
+        this.setAuthMode('login');
         form.reset();
         this.showNotice('Si un compte correspond à cette adresse, un lien de réinitialisation sera envoyé.');
+        return;
       } else if (this.authMode() === 'reset') {
         await this.auth.confirmPasswordReset(this.resetToken(), password);
         this.resetToken.set('');
-        this.authMode.set('login');
+        this.setAuthMode('login');
         form.reset();
         this.showNotice('Votre mot de passe a été modifié. Vous pouvez vous connecter.');
+        return;
       } else if (this.authMode() === 'register') {
         await this.auth.register(displayName, email, password);
       } else {
@@ -720,6 +753,7 @@ export class App implements OnDestroy {
       this.adminUsers.update(users => [created, ...users]);
       form.reset();
       this.showNotice(`Le compte ${created.email} a été créé (${created.role}).`);
+      await this.refreshAdminUsers();
     } catch (error) {
       this.showNotice(this.errorMessage(error, 'Le compte n’a pas pu être créé.'), true);
     } finally {
@@ -742,11 +776,93 @@ export class App implements OnDestroy {
       const updated = await this.admin.setUserEnabled(user.id, enabled);
       this.adminUsers.update(users => users.map(item => item.id === updated.id ? updated : item));
       this.showNotice(enabled ? 'Le compte a été réactivé.' : 'Le compte a été désactivé.');
+      await this.refreshAdminUsers();
     } catch (error) {
       this.showNotice(this.errorMessage(error, 'Le statut du compte n’a pas pu être modifié.'), true);
     } finally {
       this.adminBusy.set(false);
     }
+  }
+
+  async changeManagedUserRole(user: ManagedUser, event: Event): Promise<void> {
+    if (this.authUser()?.role !== 'ADMIN') return;
+    const select = event.target as HTMLSelectElement;
+    const role = select.value;
+    if (role !== 'USER' && role !== 'ADMIN') {
+      select.value = user.role;
+      return;
+    }
+    if (role === user.role) return;
+    if (!await this.requestConfirmation(
+      'Modifier le rôle de ce compte ?',
+      `Le compte ${user.email} passera au rôle ${role === 'ADMIN' ? 'Administrateur' : 'Utilisateur'}. Sa prochaine requête API nécessitera une nouvelle connexion.`,
+      'Modifier le rôle'
+    )) {
+      select.value = user.role;
+      return;
+    }
+
+    this.adminBusy.set(true);
+    try {
+      const updated = await this.admin.setUserRole(user.id, role);
+      this.adminUsers.update(users => users.map(item => item.id === updated.id ? updated : item));
+      this.showNotice(`Le rôle de ${updated.email} a été modifié.`);
+      await this.refreshAdminUsers();
+    } catch (error) {
+      select.value = user.role;
+      this.showNotice(this.errorMessage(error, 'Le rôle du compte n’a pas pu être modifié.'), true);
+    } finally {
+      this.adminBusy.set(false);
+    }
+  }
+
+  async requestManagedUserPasswordReset(user: ManagedUser): Promise<void> {
+    if (this.authUser()?.role !== 'ADMIN') return;
+    if (!await this.requestConfirmation(
+      'Envoyer un lien de réinitialisation ?',
+      `Un lien de réinitialisation sera envoyé à ${user.email}. Il expirera après 30 minutes.`,
+      'Envoyer le lien'
+    )) return;
+
+    this.adminBusy.set(true);
+    try {
+      const response = await this.admin.sendPasswordReset(user.id);
+      this.showNotice(response.message);
+      await this.refreshAdminUsers();
+    } catch (error) {
+      this.showNotice(this.errorMessage(error, 'Le lien de réinitialisation n’a pas pu être envoyé.'), true);
+    } finally {
+      this.adminBusy.set(false);
+    }
+  }
+
+  async toggleManagedUserActivity(user: ManagedUser): Promise<void> {
+    if (this.expandedAdminUserId() === user.id) {
+      this.expandedAdminUserId.set(null);
+      return;
+    }
+    this.expandedAdminUserId.set(user.id);
+    if (this.adminUserActivity()[user.id]) return;
+
+    this.activityLoadingUserId.set(user.id);
+    try {
+      const activity = await this.admin.getUserActivity(user.id);
+      this.adminUserActivity.update(items => ({ ...items, [user.id]: activity }));
+    } catch (error) {
+      this.showNotice(this.errorMessage(error, 'Les statistiques de ce compte n’ont pas pu être chargées.'), true);
+      this.expandedAdminUserId.set(null);
+    } finally {
+      this.activityLoadingUserId.set(null);
+    }
+  }
+
+  trendBarHeight(values: number[], value: number): number {
+    const maximum = Math.max(1, ...values);
+    return value > 0 ? Math.max(8, value / maximum * 100) : 2;
+  }
+
+  formatTrendDate(date: string): string {
+    return new Date(`${date}T12:00:00`).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
   }
 
   downloadDocument(document: KalyDocument): void {
@@ -951,9 +1067,14 @@ export class App implements OnDestroy {
   async refreshAdminUsers(): Promise<void> {
     if (this.authUser()?.role !== 'ADMIN') return;
     try {
-      this.adminUsers.set(await this.admin.listUsers());
+      const [users, stats] = await Promise.all([
+        this.admin.listUsers(),
+        this.admin.getStats()
+      ]);
+      this.adminUsers.set(users);
+      this.adminStats.set(stats);
     } catch (error) {
-      this.showNotice(this.errorMessage(error, 'La liste des utilisateurs n’a pas pu être chargée.'), true);
+      this.showNotice(this.errorMessage(error, 'Les données d’administration n’ont pas pu être chargées.'), true);
     }
   }
 
@@ -1119,6 +1240,16 @@ export class App implements OnDestroy {
   private showNotice(message: string, isError = false): void {
     this.notice.set(message);
     this.noticeIsError.set(isError);
+  }
+
+  private updateAuthUrl(register = false): void {
+    const url = new URL(location.href);
+    if (register) {
+      url.searchParams.set('auth', 'register');
+    } else {
+      url.searchParams.delete('auth');
+    }
+    history.replaceState(history.state, '', `${url.pathname}${url.search}${url.hash}`);
   }
 
   private errorMessage(error: unknown, fallback: string): string {

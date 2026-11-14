@@ -39,8 +39,14 @@ Route::middleware('kaly.auth')->group(function (): void {
     Route::middleware('kaly.admin')->prefix('admin/users')->group(function (): void {
         Route::get('/', [AdminUserController::class, 'index']);
         Route::post('/', [AdminUserController::class, 'store']);
+        Route::get('/{id}/activity', [AdminUserController::class, 'activity']);
+        Route::patch('/{id}/role', [AdminUserController::class, 'setRole']);
+        Route::post('/{id}/password-reset', [AdminUserController::class, 'sendPasswordReset'])
+            ->middleware('throttle:5,1,admin-password-reset');
         Route::patch('/{id}/enabled', [AdminUserController::class, 'setEnabled']);
     });
 });
+
+Route::middleware(['kaly.auth', 'kaly.admin'])->get('/admin/stats', [AdminUserController::class, 'stats']);
 
 Route::post('/pdf/merge', [PdfController::class, 'merge'])->middleware('kaly.auth');
