@@ -6,9 +6,69 @@
   <base href="/">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Kaly, votre espace privé pour numériser, organiser et préparer vos documents PDF.">
-  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="icon" type="image/png" href="Mascotte-kaly.png">
+  <style>
+    #app-loading {
+      align-items: center;
+      background: #f5f6f8;
+      color: #202736;
+      display: flex;
+      flex-direction: column;
+      font-family: "Segoe UI", sans-serif;
+      gap: 14px;
+      inset: 0;
+      justify-content: center;
+      position: fixed;
+      z-index: 10000;
+    }
+
+    #app-loading img {
+      animation: kaly-loading-float 1.8s ease-in-out infinite;
+      height: auto;
+      width: min(58vw, 220px);
+    }
+
+    #app-loading p {
+      font-size: 14px;
+      font-weight: 600;
+      margin: 0;
+    }
+
+    #app-loading .loading-spinner {
+      animation: kaly-loading-spin 750ms linear infinite;
+      border: 3px solid #356ae633;
+      border-radius: 50%;
+      border-top-color: #356ae6;
+      height: 22px;
+      width: 22px;
+    }
+
+    #app-loading.app-loading-error .loading-spinner {
+      display: none;
+    }
+
+    @keyframes kaly-loading-float {
+      50% { transform: translateY(-7px); }
+    }
+
+    @keyframes kaly-loading-spin {
+      to { transform: rotate(360deg); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      #app-loading img,
+      #app-loading .loading-spinner {
+        animation: none;
+      }
+    }
+  </style>
 </head>
 <body>
+  <div id="app-loading" role="status" aria-live="polite">
+    <img src="Mascotte-kaly.png" alt="">
+    <span class="loading-spinner" aria-hidden="true"></span>
+    <p data-loading-message>Chargement de Kaly…</p>
+  </div>
   <app-root></app-root>
 </body>
 </html>

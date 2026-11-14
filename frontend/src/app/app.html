@@ -1,4 +1,10 @@
-<div class="app-shell">
+<div class="app-loading-screen" [hidden]="sessionReady()" role="status" aria-live="polite">
+  <img src="Mascotte-kaly.png" alt="">
+  <span class="loading-spinner" aria-hidden="true"></span>
+  <p>Préparation de votre espace…</p>
+</div>
+
+<div class="app-shell" [attr.inert]="sessionReady() ? null : ''" [attr.aria-hidden]="sessionReady() ? null : 'true'">
   <aside class="sidebar" [class.sidebar-open]="menuOpen()">
     <a class="brand" href="#" (click)="navigate('home', $event)" aria-label="Kaly accueil">
       <span class="brand-mark"><svg lucideHouse /></span>

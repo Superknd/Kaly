@@ -19,6 +19,8 @@ php artisan migrate
 php artisan serve --host=127.0.0.1 --port=8080
 ```
 
+For a standalone MySQL 8+ schema script instead of running Laravel migrations, apply `database/schema.mysql.sql` to your MySQL server. It creates the `kaly` database and its tables if they do not already exist; it does not drop or modify existing tables.
+
 ## Tests
 
 ```powershell
